@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: timetable-api
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DEBUG=True
+      - ENVIRONMENT=development
+    volumes:
+      - .:/app
+    command: >
+      bash -c "pip install -r requirements.txt --user &&
+               uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    networks:
+      - timetable-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  timetable-network:
+    driver: bridge
