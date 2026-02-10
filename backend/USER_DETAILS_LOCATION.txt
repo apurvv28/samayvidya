@@ -1,0 +1,12 @@
+The user details for signup are stored in two places:
+
+1.  **`auth.users` Table** (System Table):
+    *   This is Supabase's internal table for authentication.
+    *   **Stored here**: User UUID, Email, Encrypted Password, Confirmed At timestamp, and `raw_user_meta_data`.
+    *   **Metadata**: The `name`, `phone`, `department`, and `role` are stored as a JSON object in the `raw_user_meta_data` column of this table.
+    *   *Note: You cannot usually query this table directly from the frontend; it's protected.*
+
+2.  **`public.user_profiles` Table** (Custom Table):
+    *   This is the table we created in your database.
+    *   **Stored here**: `user_id` (links to `auth.users`), `role` (enum: STUDENT, FACULTY, COORDINATOR, HOD), and other profile-specific links (like `department_id` if we add it).
+    *   **Purpose**: This table allows us to join user data with other tables (like `departments`, `timetable_entries`) and enables Row Level Security (RLS) based on roles.

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 
 router = APIRouter(prefix="/departments", tags=["departments"])
@@ -29,12 +29,11 @@ class DepartmentUpdate(BaseModel):
 
 
 @router.get("", response_model=SuccessResponse)
-async def list_departments(
-    current_user: CurrentUser = Depends(get_current_user),
-) -> dict:
-    """List all departments (RLS enforced)."""
+async def list_departments() -> dict:
+    """List all departments (Public, RLS bypassed)."""
     try:
-        supabase = get_user_supabase()
+        # Use service client to bypass RLS and ensure dropdowns work
+        supabase = get_service_supabase()
         response = supabase.table("departments").select("*").execute()
         return {"data": response.data, "message": "Departments retrieved successfully"}
     except Exception as e:

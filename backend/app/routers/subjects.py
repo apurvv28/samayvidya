@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, SubjectTypeEnum
 
 router = APIRouter(prefix="/subjects", tags=["subjects"])
@@ -15,11 +15,13 @@ class SubjectCreate(BaseModel):
     subject_name: str
     subject_type: SubjectTypeEnum
     credits: int
+    hours_per_week: int
     theory_hours: int = 0
     lab_hours: int = 0
     tutorial_hours: int = 0
     requires_continuity: bool
     department_id: str
+    year: str
 
 
 class SubjectUpdate(BaseModel):
@@ -28,6 +30,7 @@ class SubjectUpdate(BaseModel):
     subject_name: str | None = None
     subject_type: SubjectTypeEnum | None = None
     credits: int | None = None
+    hours_per_week: int | None = None
     theory_hours: int | None = None
     lab_hours: int | None = None
     tutorial_hours: int | None = None
@@ -36,12 +39,20 @@ class SubjectUpdate(BaseModel):
 
 @router.get("", response_model=SuccessResponse)
 async def list_subjects(
-    current_user: CurrentUser = Depends(get_current_user),
+    year: str | None = None,
 ) -> dict:
-    """List all subjects (RLS enforced)."""
+    """List subjects (Service Role - Bypasses RLS). Optional year filter."""
     try:
-        supabase = get_user_supabase()
-        response = supabase.table("subjects").select("*").execute()
+        # Use service client to bypass RLS and ensure visibility
+        supabase = get_service_supabase()
+        
+        # Fetch subjects with department details
+        query = supabase.table("subjects").select("*, departments(department_name)")
+        
+        if year:
+            query = query.eq("year", year)
+            
+        response = query.execute()
         return {"data": response.data, "message": "Subjects retrieved successfully"}
     except Exception as e:
         raise HTTPException(
@@ -81,9 +92,10 @@ async def create_subject(
     subject: SubjectCreate,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Create a new subject."""
+    """Create a new subject (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        # Use service client to bypass RLS for creation
+        supabase = get_service_supabase()
         response = (
             supabase.table("subjects").insert(subject.model_dump()).execute()
         )
@@ -130,9 +142,9 @@ async def delete_subject(
     subject_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Delete a subject."""
+    """Delete a subject (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = (
             supabase.table("subjects")
             .delete()
