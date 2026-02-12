@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     debug: bool = True
     environment: str = "development"
 
+    # Email
+    smtp_server: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: str
+
     class Config:
         env_file = ".env"
         case_sensitive = False

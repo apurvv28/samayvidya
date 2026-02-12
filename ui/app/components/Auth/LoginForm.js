@@ -48,6 +48,7 @@ export default function LoginForm({ onFlip }) {
         if (!role && authData.user.user_metadata?.role) {
              const metaRole = authData.user.user_metadata.role;
              if (metaRole === 'Student') role = 'STUDENT';
+             else if (metaRole === 'FACULTY') role = 'FACULTY';
              else if (metaRole === 'Head of Dept' || metaRole === 'Time Table Coordinator') role = 'COORDINATOR';
         }
 

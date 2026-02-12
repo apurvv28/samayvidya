@@ -13,9 +13,9 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
     ? [
         { id: 'semester', label: 'Semester', icon: BookOpen },
         { id: 'agent', label: 'Agent', icon: BrainCircuit },
-        { id: 'timetable', label: 'My Timetable', icon: Calendar },
-        { id: 'add-faculty', label: 'Add Faculty', icon: Users },
-        { id: 'add-division', label: 'Add Division', icon: PlusCircle },
+        { id: 'timetable', label: 'Timetables', icon: Calendar },
+        { id: 'add-faculty', label: 'Manage Faculty', icon: Users },
+        { id: 'add-division', label: 'Manage Divisions', icon: PlusCircle },
         { id: 'resources', label: 'Manage Resources', icon: Building2 },
       ]
     : [

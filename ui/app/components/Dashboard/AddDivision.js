@@ -1,11 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../utils/supabase';
 import { Upload, FileText, CheckCircle, PlusCircle } from 'lucide-react';
+
+const API_BASE_URL = 'http://localhost:8000';
 
 export default function AddDivision() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  const [divisionData, setDivisionData] = useState({
+    division_name: '',
+    year: '2024-2025',
+    department_id: '',
+    // Defaults
+    student_count: 60,
+    min_working_days: 5,
+    max_working_days: 6,
+    earliest_start_time: "09:00",
+    latest_end_time: "17:00"
+  });
+
+  useEffect(() => {
+    fetchDepartments();
+  }, []);
+
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token;
+  };
+
+  const fetchDepartments = async () => {
+    try {
+        const token = await getAuthToken();
+        const response = await fetch(`${API_BASE_URL}/departments`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            setDepartments(data.data || []);
+        }
+    } catch (error) {
+        console.error("Failed to fetch departments:", error);
+    }
+  };
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -30,6 +70,68 @@ export default function AddDivision() {
     }
   };
 
+  const handleSubmit = async () => {
+    if (!divisionData.division_name) {
+        alert('Division Name is required');
+        return;
+    }
+    if (!divisionData.department_id) {
+         alert("Please select a Department"); 
+         return; 
+    }
+
+    try {
+        setLoading(true);
+        const token = await getAuthToken();
+
+        // 1. Create Division
+        const divResponse = await fetch(`${API_BASE_URL}/divisions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(divisionData)
+        });
+        
+        const divJson = await divResponse.json();
+        if (!divResponse.ok) throw new Error(divJson.detail || 'Failed to create division');
+        
+        const divisionId = divJson.data[0].division_id;
+
+        // 2. Upload CSV if selected
+        if (file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const uploadResponse = await fetch(`${API_BASE_URL}/divisions/${divisionId}/students/upload`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+            
+            const uploadJson = await uploadResponse.json();
+            if (!uploadResponse.ok) throw new Error(uploadJson.detail || 'Failed to upload students');
+            
+            alert(`Division created! ${uploadJson.message}`);
+        } else {
+             alert('Division created successfully (no students uploaded).');
+        }
+
+        // Reset
+        setFile(null);
+        setDivisionData({ ...divisionData, division_name: '' });
+
+    } catch (error) {
+        console.error(error);
+        alert('Error: ' + error.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
        <div className="mb-8 text-center">
@@ -48,14 +150,46 @@ export default function AddDivision() {
                     type="text" 
                     className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
                     placeholder="e.g. SY-CSE-A"
+                    value={divisionData.division_name}
+                    onChange={(e) => setDivisionData({...divisionData, division_name: e.target.value})}
                 />
             </div>
             <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">Department</label>
+                 <select 
+                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    value={divisionData.department_id}
+                    onChange={(e) => setDivisionData({...divisionData, department_id: e.target.value})}
+                >
+                    <option value="">Select Department</option>
+                    {departments.map(dept => (
+                        <option key={dept.department_id} value={dept.department_id}>
+                            {dept.department_name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-300">Academic Year</label>
-                <select className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all">
+                <select 
+                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    value={divisionData.year}
+                    onChange={(e) => setDivisionData({...divisionData, year: e.target.value})}
+                >
                     <option>2024-2025</option>
                     <option>2025-2026</option>
+                    <option>2026-2027</option>
                 </select>
+            </div>
+            <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">Student Count</label>
+                <input 
+                    type="number" 
+                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    placeholder="60"
+                    value={divisionData.student_count}
+                    onChange={(e) => setDivisionData({...divisionData, student_count: parseInt(e.target.value) || 0})}
+                />
             </div>
         </div>
 
@@ -104,8 +238,12 @@ export default function AddDivision() {
             </div>
         </div>
 
-        <button className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-green-500/20 transition-all">
-            Create Division & Import Students
+        <button 
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-green-500/20 transition-all disabled:opacity-50"
+        >
+            {loading ? 'Processing...' : 'Create Division & Import Students'}
         </button>
       </div>
     </div>

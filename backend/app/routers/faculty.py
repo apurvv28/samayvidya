@@ -2,8 +2,11 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, FacultyRoleEnum
+from app.services.email_service import send_faculty_credentials
+import secrets
+import string
 
 router = APIRouter(prefix="/faculty", tags=["faculty"])
 
@@ -22,6 +25,13 @@ class FacultyCreate(BaseModel):
     max_load_per_week: int
     department_id: str
     is_active: bool = True
+    designation: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    target_theory_load: int = 0
+    target_lab_load: int = 0
+    target_tutorial_load: int = 0
+    target_other_load: int = 0
 
 
 class FacultyUpdate(BaseModel):
@@ -37,15 +47,20 @@ class FacultyUpdate(BaseModel):
     max_working_days: int | None = None
     max_load_per_week: int | None = None
     is_active: bool | None = None
+    designation: str | None = None
+    target_theory_load: int | None = None
+    target_lab_load: int | None = None
+    target_tutorial_load: int | None = None
+    target_other_load: int | None = None
 
 
 @router.get("", response_model=SuccessResponse)
 async def list_faculty(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """List all faculty members (RLS enforced)."""
+    """List all faculty members (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = supabase.table("faculty").select("*").execute()
         return {"data": response.data, "message": "Faculty retrieved successfully"}
     except Exception as e:
@@ -86,16 +101,85 @@ async def create_faculty(
     faculty: FacultyCreate,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Create a new faculty member."""
+    """Create a new faculty member with Auth user and Email notification."""
     try:
-        supabase = get_user_supabase()
-        response = (
-            supabase.table("faculty").insert(faculty.model_dump()).execute()
+        supabase = get_service_supabase() # Use service role for Auth Admin and RLS bypass
+        
+        # 0. Check if Faculty Code already exists
+        existing_faculty = supabase.table("faculty").select("faculty_id").eq("faculty_code", faculty.faculty_code).execute()
+        if existing_faculty.data:
+            raise HTTPException(status_code=400, detail=f"Faculty code '{faculty.faculty_code}' already exists.")
+
+        # 1. Validate Email
+        if not faculty.email:
+            raise HTTPException(status_code=400, detail="Email is required for new faculty")
+
+        # 2. Generate Password (Firstname + Last 4 digits of phone)
+        first_name = faculty.faculty_name.split()[0]
+        # Clean phone number to get last 4 digits
+        phone_digits = ''.join(filter(str.isdigit, faculty.phone or ""))
+        phone_suffix = phone_digits[-4:] if len(phone_digits) >= 4 else "1234"
+        password = f"{first_name}{phone_suffix}"
+
+        # 3. Create Supabase Auth User
+        try:
+            user_attributes = {
+                "email": faculty.email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": faculty.faculty_name,
+                    "role": "FACULTY",
+                    "designation": faculty.designation or ""
+                }
+            }
+            auth_response = supabase.auth.admin.create_user(user_attributes)
+            user_id = auth_response.user.id
+        except Exception as auth_error:
+            # Handle case where user might validly exist or other auth errors
+            # If user exists, we might still want to proceed with creating faculty record.
+            print(f"Auth creation failed (user might exist): {auth_error}")
+            raise HTTPException(status_code=400, detail=f"Failed to create user account: {str(auth_error)}")
+
+        # 4. Create/Update Link in User Profiles (if using a profiles table)
+        try:
+            profile_data = {
+                "id": user_id,
+                "email": faculty.email,
+                "full_name": faculty.faculty_name,
+                "role": "FACULTY",
+                "is_active": True
+            }
+            # Attempt upsert to ensure profile exists
+            supabase.table("user_profiles").upsert(profile_data).execute()
+        except Exception as profile_error:
+            print(f"Profile creation warning: {profile_error}")
+            # Create might fail if table doesn't exist or permissions, but we proceed to Faculty table.
+
+        # 5. Insert into Faculty Table
+        faculty_data = faculty.model_dump()
+        response = supabase.table("faculty").insert(faculty_data).execute()
+
+        # 6. Send Email Credentials
+        email_sent = send_faculty_credentials(
+            to_email=faculty.email, 
+            name=faculty.faculty_name, 
+            password=password, 
+            faculty_id=faculty.faculty_code
         )
+        
+        msg = "Faculty created successfully"
+        if not email_sent:
+            msg += ", but failed to send email."
+        else:
+            msg += " and email sent."
+
         return {
             "data": response.data,
-            "message": "Faculty created successfully",
+            "message": msg,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -158,6 +242,10 @@ async def delete_faculty(
 class FacultySubjectAssign(BaseModel):
     subject_id: str
     year_id: str | None = None
+    division_id: str | None = None
+    is_theory: bool = False
+    is_lab: bool = False
+    is_tutorial: bool = False
 
 
 @router.get("/{faculty_id}/subjects", response_model=SuccessResponse)
@@ -198,7 +286,11 @@ async def assign_subject_to_faculty(
         data = {
             "faculty_id": faculty_id,
             "subject_id": assignment.subject_id,
-            "year_id": assignment.year_id
+            "year_id": assignment.year_id,
+            "division_id": assignment.division_id,
+            "is_theory": assignment.is_theory,
+            "is_lab": assignment.is_lab,
+            "is_tutorial": assignment.is_tutorial
         }
         response = (
             supabase.table("faculty_subjects")

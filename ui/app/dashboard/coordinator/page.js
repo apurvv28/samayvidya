@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
 import Semester from '../../components/Dashboard/Semester';
-import AddFaculty from '../../components/Dashboard/AddFaculty';
+import ManageFaculty from '../../components/Dashboard/ManageFaculty';
 import AddDivision from '../../components/Dashboard/AddDivision';
 import ManageResources from '../../components/Dashboard/ManageResources';
 
@@ -15,7 +15,7 @@ export default function CoordinatorDashboard() {
       case 'semester':
         return <Semester />;
       case 'add-faculty':
-        return <AddFaculty />;
+        return <ManageFaculty />;
       case 'add-division':
         return <AddDivision />;
       case 'resources':
