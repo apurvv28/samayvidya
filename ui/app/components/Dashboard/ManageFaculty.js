@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { Plus, Save, BookOpen, Users, Clock, Check, AlertCircle, X, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
+import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = 'http://localhost:8000';
 
 export default function ManageFaculty() {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('list');
   const [faculties, setFaculties] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -170,7 +172,7 @@ export default function ManageFaculty() {
   const handleMappingSubmit = async (e) => {
     e.preventDefault();
     if (!mapping.faculty_id || !mapping.subject_id || !mapping.division_id) {
-        alert('Please select Faculty, Subject, and Division');
+        showToast('Please select Faculty, Subject, and Division', 'error');
         return;
     }
 
@@ -178,38 +180,52 @@ export default function ManageFaculty() {
         setSubmitting(true);
         const token = await getAuthToken();
 
-        const is_theory = ['theory', 'both', 'theory_tutorial', 'all'].includes(mapping.load_type);
-        const is_lab = ['lab', 'both', 'all'].includes(mapping.load_type);
-        const is_tutorial = ['tutorial', 'theory_tutorial', 'all'].includes(mapping.load_type);
-
-        const payload = {
-            subject_id: mapping.subject_id,
-            year_id: null, // Optional, maybe get from subject?
-            division_id: mapping.division_id,
-            is_theory,
-            is_lab,
-            is_tutorial
-        };
-
-        const response = await fetch(`${API_BASE_URL}/faculty/${mapping.faculty_id}/subjects`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
-        });
-
-        const json = await response.json();
-
-        if (!response.ok) {
-            throw new Error(json.detail || 'Failed to map course');
+        if (!token) {
+            showToast('Authentication failed. Please log in again.', 'error');
+            setSubmitting(false);
+            return;
         }
 
-        alert('Course mapped successfully!');
+        // Determine session types to add based on load_type selection
+        let sessionTypes = [];
+        if (mapping.load_type === 'theory') sessionTypes = ['THEORY'];
+        else if (mapping.load_type === 'lab') sessionTypes = ['LAB'];
+        else if (mapping.load_type === 'tutorial') sessionTypes = ['TUTORIAL'];
+        else if (mapping.load_type === 'both') sessionTypes = ['THEORY', 'LAB'];
+        else if (mapping.load_type === 'theory_tutorial') sessionTypes = ['THEORY', 'TUTORIAL'];
+        else if (mapping.load_type === 'all') sessionTypes = ['THEORY', 'LAB', 'TUTORIAL'];
+
+        // Submit one request per session type
+        for (const type of sessionTypes) {
+            const payload = {
+                subject_id: mapping.subject_id,
+                division_id: mapping.division_id,
+                batch_id: null, // Default to null for now, can be updated later if batch selection is added
+                session_type: type
+            };
+
+            const response = await fetch(`${API_BASE_URL}/faculty/${mapping.faculty_id}/subjects`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const json = await response.json();
+
+            if (!response.ok) {
+                console.error("Mapping failed for", type, json);
+                throw new Error(json.detail || `Failed to map ${type}`);
+            }
+        }
+
+        showToast('Course mapped successfully!', 'success');
+        // Ideally clear form or fetch data again
     } catch (error) {
         console.error('Error mapping course:', error);
-        alert('Failed to map course: ' + error.message);
+        showToast('Failed to map course: ' + error.message, 'error');
     } finally {
         setSubmitting(false);
     }
@@ -222,6 +238,12 @@ export default function ManageFaculty() {
     try {
         setSubmitting(true);
         const token = await getAuthToken();
+
+        if (!token) {
+            showToast('Authentication failed. Please log in again.', 'error');
+            setSubmitting(false);
+            return;
+        }
 
         const payload = {
             target_theory_load: parseInt(loadDist.target_theory_load),

@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { UserPlus, Mail, Phone, User, IdCard } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 export default function AddFaculty() {
+  const { showToast } = useToast();
   const [formData, setFormData] = useState({
     name: '',
     id: '',
@@ -13,10 +15,11 @@ export default function AddFaculty() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    alert(`Faculty Added:\nName: ${formData.name}\nID: ${formData.id}`);
+    // Simulate API call
+    showToast(`Faculty Added: ${formData.name} (${formData.id})`, 'success');
     setFormData({ name: '', id: '', email: '', phone: '' });
   };
-
+// ... rest of the component
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <div className="mb-8 text-center">

@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabase';
 import { Upload, FileText, CheckCircle, PlusCircle } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = 'http://localhost:8000';
 
 export default function AddDivision() {
+  const { showToast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -72,17 +74,23 @@ export default function AddDivision() {
 
   const handleSubmit = async () => {
     if (!divisionData.division_name) {
-        alert('Division Name is required');
+        showToast('Division Name is required', 'error');
         return;
     }
     if (!divisionData.department_id) {
-         alert("Please select a Department"); 
+         showToast("Please select a Department", 'error'); 
          return; 
     }
 
     try {
         setLoading(true);
         const token = await getAuthToken();
+        
+        if (!token) {
+            showToast('Authentication failed. Please log in again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // 1. Create Division
         const divResponse = await fetch(`${API_BASE_URL}/divisions`, {
@@ -115,9 +123,9 @@ export default function AddDivision() {
             const uploadJson = await uploadResponse.json();
             if (!uploadResponse.ok) throw new Error(uploadJson.detail || 'Failed to upload students');
             
-            alert(`Division created! ${uploadJson.message}`);
+            showToast(`Division created! ${uploadJson.message}`, 'success');
         } else {
-             alert('Division created successfully (no students uploaded).');
+             showToast('Division created successfully (no students uploaded).', 'success');
         }
 
         // Reset
@@ -126,7 +134,7 @@ export default function AddDivision() {
 
     } catch (error) {
         console.error(error);
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     } finally {
         setLoading(false);
     }

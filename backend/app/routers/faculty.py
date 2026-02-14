@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, CurrentUser
 from app.supabase_client import get_user_supabase, get_service_supabase
-from app.schemas.common import SuccessResponse, FacultyRoleEnum
+from app.schemas.common import SuccessResponse, FacultyRoleEnum, SubjectTypeEnum
 from app.services.email_service import send_faculty_credentials
 import secrets
 import string
@@ -195,7 +195,7 @@ async def update_faculty(
 ) -> dict:
     """Update a faculty member."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         update_data = faculty.model_dump(exclude_unset=True)
         response = (
             supabase.table("faculty")
@@ -239,13 +239,12 @@ async def delete_faculty(
         )
 
 
+
 class FacultySubjectAssign(BaseModel):
     subject_id: str
-    year_id: str | None = None
     division_id: str | None = None
-    is_theory: bool = False
-    is_lab: bool = False
-    is_tutorial: bool = False
+    batch_id: str | None = None
+    session_type: SubjectTypeEnum
 
 
 @router.get("/{faculty_id}/subjects", response_model=SuccessResponse)
@@ -256,10 +255,13 @@ async def get_faculty_subjects(
     """Get subjects assigned to a faculty member."""
     try:
         supabase = get_user_supabase()
-        # Join with subjects table
+        # Join with subjects table and other related tables
+        # Adjusting query to fetch related data from the new mapping table
+        # Note: We need to ensure foreign keys are correctly set up in Supabase for this join to work seamlessly with `select` syntax.
+        # Assuming `subjects`, `divisions`, `batches` are related.
         response = (
-            supabase.table("faculty_subjects")
-            .select("*, subjects(*), academic_years(*)")
+            supabase.table("faculty_subject_mapping")
+            .select("*, subjects(*), divisions(*), batches(*)")
             .eq("faculty_id", faculty_id)
             .execute()
         )
@@ -282,18 +284,21 @@ async def assign_subject_to_faculty(
 ) -> dict:
     """Assign a subject to a faculty member."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
+        
+        # Verify uniqueness or other business logic if needed (e.g. check overlaps)
+        # For now, allowing multiple assignments as per schema unless unique constraint violations occur.
+
         data = {
             "faculty_id": faculty_id,
             "subject_id": assignment.subject_id,
-            "year_id": assignment.year_id,
             "division_id": assignment.division_id,
-            "is_theory": assignment.is_theory,
-            "is_lab": assignment.is_lab,
-            "is_tutorial": assignment.is_tutorial
+            "batch_id": assignment.batch_id,
+            "session_type": assignment.session_type
         }
+        
         response = (
-            supabase.table("faculty_subjects")
+            supabase.table("faculty_subject_mapping")
             .insert(data)
             .execute()
         )
@@ -307,20 +312,20 @@ async def assign_subject_to_faculty(
             detail=f"Failed to assign subject: {str(e)}",
         )
 
-@router.delete("/{faculty_id}/subjects/{subject_id}", response_model=SuccessResponse)
+@router.delete("/{faculty_id}/subjects/{mapping_id}", response_model=SuccessResponse)
 async def unassign_subject_from_faculty(
     faculty_id: str,
-    subject_id: str,
+    mapping_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Unassign a subject from a faculty member."""
+    """Unassign a subject from a faculty member (Delete Mapping)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = (
-            supabase.table("faculty_subjects")
+            supabase.table("faculty_subject_mapping")
             .delete()
-            .eq("faculty_id", faculty_id)
-            .eq("subject_id", subject_id)
+            .eq("mapping_id", mapping_id)
+            .eq("faculty_id", faculty_id) # Extra safety check
             .execute()
         )
         return {
