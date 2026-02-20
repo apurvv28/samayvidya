@@ -25,7 +25,14 @@ export default function Semester() {
     year: 'SY',
     theory_hours: 0,
     lab_hours: 0,
-    tutorial_hours: 0
+    year: 'SY',
+    theory_hours: 0,
+    lab_hours: 0,
+    tutorial_hours: 0,
+    delivery_mode: 'OFFLINE',
+    is_theory_online: false,
+    is_lab_online: false,
+    is_tutorial_online: false
   });
 
   useEffect(() => {
@@ -111,7 +118,11 @@ export default function Semester() {
           tutorial_hours: formData.tutorial_hours,
           requires_continuity: formData.requires_continuity,
           department_id: formData.department_id,
-          year: formData.year
+          year: formData.year,
+          delivery_mode: formData.delivery_mode,
+          is_theory_online: formData.delivery_mode === 'ONLINE' ? true : formData.is_theory_online,
+          is_lab_online: formData.delivery_mode === 'ONLINE' ? true : formData.is_lab_online,
+          is_tutorial_online: formData.delivery_mode === 'ONLINE' ? true : formData.is_tutorial_online
       };
       
       // I must assume I need to fix the backend model as well.
@@ -160,7 +171,12 @@ export default function Semester() {
       year: year,
       theory_hours: 0,
       lab_hours: 0,
-      tutorial_hours: 0
+      lab_hours: 0,
+      tutorial_hours: 0,
+      delivery_mode: 'OFFLINE',
+      is_theory_online: false,
+      is_lab_online: false,
+      is_tutorial_online: false
     });
   };
 
@@ -398,6 +414,94 @@ export default function Semester() {
                                     onChange={e => setFormData({...formData, tutorial_hours: e.target.value === '' ? '' : parseInt(e.target.value)})}
                                 />
                             </div>
+                        </div>
+
+                        {/* Delivery Mode & Online Status */}
+                        <div className="space-y-3 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                            <label className="text-xs font-semibold text-gray-400 uppercase block">Delivery Mode</label>
+                            <div className="flex gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="radio" 
+                                        name="delivery_mode"
+                                        value="OFFLINE"
+                                        checked={formData.delivery_mode === 'OFFLINE'}
+                                        onChange={e => setFormData({
+                                            ...formData, 
+                                            delivery_mode: e.target.value,
+                                            is_theory_online: false,
+                                            is_lab_online: false,
+                                            is_tutorial_online: false
+                                        })}
+                                        className="text-indigo-600 focus:ring-indigo-500 bg-gray-900 border-gray-700"
+                                    />
+                                    <span className="text-sm text-gray-300">Offline</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="radio" 
+                                        name="delivery_mode"
+                                        value="ONLINE"
+                                        checked={formData.delivery_mode === 'ONLINE'}
+                                        onChange={e => setFormData({
+                                            ...formData, 
+                                            delivery_mode: e.target.value,
+                                            is_theory_online: true,
+                                            is_lab_online: true,
+                                            is_tutorial_online: true
+                                        })}
+                                        className="text-indigo-600 focus:ring-indigo-500 bg-gray-900 border-gray-700"
+                                    />
+                                    <span className="text-sm text-gray-300">Online</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="radio" 
+                                        name="delivery_mode"
+                                        value="PARTIAL"
+                                        checked={formData.delivery_mode === 'PARTIAL'}
+                                        onChange={e => setFormData({...formData, delivery_mode: e.target.value})}
+                                        className="text-indigo-600 focus:ring-indigo-500 bg-gray-900 border-gray-700"
+                                    />
+                                    <span className="text-sm text-gray-300">Partially Online</span>
+                                </label>
+                            </div>
+
+                            {formData.delivery_mode === 'PARTIAL' && (
+                                <motion.div 
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="pt-2 grid grid-cols-3 gap-2"
+                                >
+                                    <label className="flex items-center gap-2 cursor-pointer bg-gray-900/50 p-2 rounded border border-gray-700/50">
+                                        <input 
+                                            type="checkbox"
+                                            checked={formData.is_theory_online}
+                                            onChange={e => setFormData({...formData, is_theory_online: e.target.checked})}
+                                            className="rounded bg-gray-800 border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-xs text-gray-300">Theory Online</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-gray-900/50 p-2 rounded border border-gray-700/50">
+                                        <input 
+                                            type="checkbox"
+                                            checked={formData.is_lab_online}
+                                            onChange={e => setFormData({...formData, is_lab_online: e.target.checked})}
+                                            className="rounded bg-gray-800 border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-xs text-gray-300">Lab Online</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-gray-900/50 p-2 rounded border border-gray-700/50">
+                                        <input 
+                                            type="checkbox"
+                                            checked={formData.is_tutorial_online}
+                                            onChange={e => setFormData({...formData, is_tutorial_online: e.target.checked})}
+                                            className="rounded bg-gray-800 border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-xs text-gray-300">Tutorial Online</span>
+                                    </label>
+                                </motion.div>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-2">

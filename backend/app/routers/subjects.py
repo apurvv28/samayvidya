@@ -22,6 +22,10 @@ class SubjectCreate(BaseModel):
     requires_continuity: bool
     department_id: str
     year: str
+    delivery_mode: str = "OFFLINE"
+    is_theory_online: bool = False
+    is_lab_online: bool = False
+    is_tutorial_online: bool = False
 
 
 class SubjectUpdate(BaseModel):
@@ -35,6 +39,10 @@ class SubjectUpdate(BaseModel):
     lab_hours: int | None = None
     tutorial_hours: int | None = None
     requires_continuity: bool | None = None
+    delivery_mode: str | None = None
+    is_theory_online: bool | None = None
+    is_lab_online: bool | None = None
+    is_tutorial_online: bool | None = None
 
 
 @router.get("", response_model=SuccessResponse)

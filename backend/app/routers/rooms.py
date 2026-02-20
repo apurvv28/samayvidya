@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, RoomTypeEnum
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
@@ -31,9 +31,9 @@ class RoomUpdate(BaseModel):
 async def list_rooms(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """List all rooms (RLS enforced)."""
+    """List all rooms (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = supabase.table("rooms").select("*").execute()
         return {"data": response.data, "message": "Rooms retrieved successfully"}
     except Exception as e:
@@ -74,9 +74,9 @@ async def create_room(
     room: RoomCreate,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Create a new room."""
+    """Create a new room (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = (
             supabase.table("rooms").insert(room.model_dump()).execute()
         )
@@ -97,9 +97,9 @@ async def update_room(
     room: RoomUpdate,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Update a room."""
+    """Update a room (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         update_data = room.model_dump(exclude_unset=True)
         response = (
             supabase.table("rooms")
@@ -123,9 +123,9 @@ async def delete_room(
     room_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Delete a room."""
+    """Delete a room (Service Role - Bypasses RLS)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = (
             supabase.table("rooms")
             .delete()

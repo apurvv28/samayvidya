@@ -3,7 +3,6 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
-
 class SubjectTypeEnum(str, Enum):
     """Subject type enumeration."""
 
@@ -11,6 +10,12 @@ class SubjectTypeEnum(str, Enum):
     LAB = "LAB"
     TUTORIAL = "TUTORIAL"
 
+class DeliveryModeEnum(str, Enum):
+    """Delivery mode enumeration."""
+
+    OFFLINE = "OFFLINE"
+    ONLINE = "ONLINE"
+    PARTIAL = "PARTIAL"
 
 class RoomTypeEnum(str, Enum):
     """Room type enumeration."""
