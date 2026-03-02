@@ -20,9 +20,14 @@ class Settings(BaseSettings):
     smtp_username: str
     smtp_password: str
 
+    # Agent API Keys
+    groq_api_key: str | None = None
+    openai_api_key: str | None = None
+
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
 
 
 settings = Settings()

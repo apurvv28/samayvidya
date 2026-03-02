@@ -20,6 +20,7 @@ from app.routers import (
     faculty_leaves,
     campus_events,
     academic_years,
+    agent_routes,
 )
 from app.config import settings
 
@@ -93,6 +94,7 @@ app.include_router(timetable_entries.router)
 app.include_router(faculty_leaves.router)
 app.include_router(campus_events.router)
 app.include_router(academic_years.router)
+app.include_router(agent_routes.router)
 
 
 @app.exception_handler(Exception)

@@ -17,6 +17,7 @@ export default function ManageFaculty() {
   const [loading, setLoading] = useState(true);
   const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [generatingLoad, setGeneratingLoad] = useState(false);
 
   // Faculty Form State
   const [newFaculty, setNewFaculty] = useState({
@@ -112,6 +113,24 @@ export default function ManageFaculty() {
         setSubmitting(true);
         const token = await getAuthToken();
         
+        // Determine Priority and Max Load based on Designation
+        let priority_level = 3;
+        let max_load_per_week = 20;
+
+        if (newFaculty.designation === 'Professor') {
+            priority_level = 1;
+            max_load_per_week = 14;
+        } else if (newFaculty.designation === 'Associate Professor') {
+            priority_level = 2;
+            max_load_per_week = 18;
+        } else if (newFaculty.designation === 'Assistant Professor') {
+            priority_level = 3;
+            max_load_per_week = 20; // or 22
+        } else {
+            priority_level = 4;
+            max_load_per_week = 22;
+        }
+
         // Payload matching Backend Pydantic Schema
         const payload = {
             faculty_code: newFaculty.faculty_code,
@@ -121,13 +140,14 @@ export default function ManageFaculty() {
             department_id: newFaculty.department_id,
             email: newFaculty.email,
             phone: newFaculty.phone,
+            // Dynamic assignment based on designation
+            priority_level: priority_level,
+            max_load_per_week: max_load_per_week,
             // Defaults for required fields
-            priority_level: 1,
             preferred_start_time: "09:00",
             preferred_end_time: "17:00",
             min_working_days: 5,
             max_working_days: 6,
-            max_load_per_week: 20,
             is_active: true
         };
 
@@ -166,6 +186,38 @@ export default function ManageFaculty() {
         alert('Failed to add faculty: ' + error.message);
     } finally {
         setSubmitting(false);
+    }
+  };
+
+  const handleGenerateAILoad = async () => {
+    try {
+        setGeneratingLoad(true);
+        const token = await getAuthToken();
+        if (!token) {
+            showToast('Authentication failed. Please log in again.', 'error');
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/agents/generate-faculty-load`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const json = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(json.detail || 'Failed to generate load');
+        }
+
+        showToast('AI Load distributed successfully!', 'success');
+        fetchData(); // Refresh the data to show updated loads
+    } catch (error) {
+        console.error('Error generating AI load:', error);
+        showToast('Failed to generate load: ' + error.message, 'error');
+    } finally {
+        setGeneratingLoad(false);
     }
   };
 
@@ -305,13 +357,23 @@ export default function ManageFaculty() {
             <h2 className="text-2xl font-bold text-white">Manage Faculty</h2>
             <p className="text-gray-400">Add faculty, map courses, and distribute load.</p>
         </div>
-        <button 
-            onClick={() => setShowAddFacultyModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-medium transition-colors"
-        >
-            <Plus className="w-5 h-5" />
-            Add Faculty
-        </button>
+        <div className="flex gap-3">
+            <button 
+                onClick={handleGenerateAILoad}
+                disabled={generatingLoad}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
+            >
+                {generatingLoad ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
+                {generatingLoad ? 'Mapping AI...' : 'Generate AI Load'}
+            </button>
+            <button 
+                onClick={() => setShowAddFacultyModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-medium transition-colors"
+            >
+                <Plus className="w-5 h-5" />
+                Add Faculty
+            </button>
+        </div>
       </div>
 
       {loading ? (
