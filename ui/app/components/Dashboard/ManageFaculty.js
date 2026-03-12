@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Save, BookOpen, Users, Clock, Check, AlertCircle, X, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Plus, Save, BookOpen, Users, Clock, Check, Upload, FileText, X, ChevronDown, Loader2 } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
 import { useToast } from '../../context/ToastContext';
 
@@ -16,6 +16,10 @@ export default function ManageFaculty() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
+  const [showUploadFacultyModal, setShowUploadFacultyModal] = useState(false);
+  const [facultyCsvFile, setFacultyCsvFile] = useState(null);
+  const [uploadingCsv, setUploadingCsv] = useState(false);
+  const [uploadSummary, setUploadSummary] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [generatingLoad, setGeneratingLoad] = useState(false);
 
@@ -186,6 +190,57 @@ export default function ManageFaculty() {
         alert('Failed to add faculty: ' + error.message);
     } finally {
         setSubmitting(false);
+    }
+  };
+
+  const handleFacultyCsvFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFacultyCsvFile(e.target.files[0]);
+      setUploadSummary(null);
+    }
+  };
+
+  const handleFacultyCsvUpload = async () => {
+    if (!facultyCsvFile) {
+      showToast('Please select a CSV or XLSX file to upload.', 'error');
+      return;
+    }
+
+    try {
+      setUploadingCsv(true);
+      const token = await getAuthToken();
+
+      if (!token) {
+        showToast('Authentication failed. Please log in again.', 'error');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', facultyCsvFile);
+
+      const response = await fetch(`${API_BASE_URL}/faculty/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.detail || 'Failed to upload faculty file');
+      }
+
+      setUploadSummary(json.data || null);
+      setFacultyCsvFile(null);
+      showToast(json.message || 'Faculty CSV processed successfully.', 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Error uploading faculty file:', error);
+      showToast('Failed to upload file: ' + error.message, 'error');
+    } finally {
+      setUploadingCsv(false);
     }
   };
 
@@ -365,6 +420,16 @@ export default function ManageFaculty() {
             >
                 {generatingLoad ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
                 {generatingLoad ? 'Mapping AI...' : 'Generate AI Load'}
+            </button>
+            <button
+                onClick={() => {
+                    setShowUploadFacultyModal(true);
+                    setUploadSummary(null);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-medium transition-colors"
+            >
+                <Upload className="w-5 h-5" />
+                Upload CSV
             </button>
             <button 
                 onClick={() => setShowAddFacultyModal(true)}
@@ -587,6 +652,104 @@ export default function ManageFaculty() {
         </div>
 
       </div>
+      )}
+
+      {/* Upload Faculty CSV Modal */}
+      {showUploadFacultyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
+                <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-gray-800/50">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Upload className="w-5 h-5 text-emerald-400" />
+                        Bulk Upload Faculty
+                    </h3>
+                    <button 
+                        onClick={() => {
+                            if (uploadingCsv) return;
+                            setShowUploadFacultyModal(false);
+                            setFacultyCsvFile(null);
+                        }}
+                        className="text-gray-400 hover:text-white transition-colors"
+                    >
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-5">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Faculty File (CSV/XLSX)</label>
+                        <input
+                            type="file"
+                            accept=".csv,.xlsx"
+                            onChange={handleFacultyCsvFileChange}
+                            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white file:mr-4 file:rounded-md file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-500"
+                        />
+                        {facultyCsvFile && (
+                            <p className="text-sm text-emerald-300 mt-2">
+                                Selected file: {facultyCsvFile.name}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 text-sm text-gray-300 space-y-2">
+                        <div className="flex items-start gap-2">
+                            <FileText className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+                            <p>
+                                CSV required columns: <span className="text-white">Faculty Code, Faculty Name, Email</span>, and
+                                either <span className="text-white">Department ID</span> or <span className="text-white">Department Name</span>.
+                            </p>
+                        </div>
+                        <p className="text-gray-400">
+                            XLSX is also supported. For EDI load-sheet style files, the importer auto-picks the faculty sheet
+                            and auto-fills missing code/email/role fields before import.
+                        </p>
+                    </div>
+
+                    {uploadSummary && (
+                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4 space-y-3">
+                            <p className="text-sm text-emerald-300">
+                                Processed: {uploadSummary.total_rows || 0} | Created: {uploadSummary.created || 0} | Failed: {uploadSummary.failed || 0}
+                            </p>
+                            {uploadSummary.errors && uploadSummary.errors.length > 0 && (
+                                <div className="max-h-32 overflow-y-auto rounded-md bg-gray-950 border border-gray-800 p-2">
+                                    {uploadSummary.errors.slice(0, 10).map((error, index) => (
+                                        <p key={`${error}-${index}`} className="text-xs text-red-300 py-0.5">{error}</p>
+                                    ))}
+                                    {uploadSummary.errors.length > 10 && (
+                                        <p className="text-xs text-gray-400 pt-1">
+                                            +{uploadSummary.errors.length - 10} more errors
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="pt-2 flex justify-end gap-3">
+                        <button 
+                            type="button"
+                            onClick={() => {
+                                if (uploadingCsv) return;
+                                setShowUploadFacultyModal(false);
+                                setFacultyCsvFile(null);
+                            }}
+                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            type="button"
+                            disabled={uploadingCsv || !facultyCsvFile}
+                            onClick={handleFacultyCsvUpload}
+                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                             {uploadingCsv && <Loader2 className="w-4 h-4 animate-spin" />}
+                             {uploadingCsv ? 'Uploading...' : 'Upload & Import'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
       )}
 
       {/* Add Faculty Modal */}
