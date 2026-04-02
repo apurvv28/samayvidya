@@ -1,95 +1,133 @@
-import os
 import json
-import logging
-from typing import List, Dict, Any
-from crewai import Agent, Task, Crew, Process, LLM
+from collections import defaultdict
+from typing import Any, Dict, List
+
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
 
-class FacultyAssignment(BaseModel):
-    faculty_id: str
+class LoadDistributionRowSummary(BaseModel):
     faculty_name: str
-    faculty_priority: int
-    target_load: int
-    total_assigned_hours: int
-    load_status: str
+    year: str | None = None
+    division: str | None = None
+    normalized_division: str | None = None
+    subject: str | None = None
+    batch: str | None = None
+    theory_hrs: float = 0
+    lab_hrs: float = 0
+    tutorial_hrs: float = 0
+    total_hrs_per_week: float = 0
+    effective_hours: float = 0
+
+
+class FacultyLoadSummary(BaseModel):
+    faculty_name: str
+    total_rows: int
+    total_theory_hours: float
+    total_lab_hours: float
+    total_tutorial_hours: float
+    total_effective_hours: float
+    divisions: List[str] = Field(default_factory=list)
+
 
 class LoadAssignmentOutput(BaseModel):
-    assignments: List[FacultyAssignment]
+    rows: List[LoadDistributionRowSummary]
+    faculty_summaries: List[FacultyLoadSummary]
     validation_passed: bool
     notes: str = ""
 
-def get_llm():
-    # Retrieve the API key from environment
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        logger.warning("GROQ_API_KEY is missing in environment.")
-        
-    return LLM(
-        model="groq/meta-llama/llama-4-scout-17b-16e-instruct",
-        temperature=0.1,
-        api_key=api_key
-    )
+
+def _normalize_division(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    for prefix in ("FY-", "SY-", "TY-", "LY-"):
+        if normalized.startswith(prefix):
+            return normalized[len(prefix):]
+    return normalized
+
+
+def _as_float(value: Any) -> float:
+    if value in (None, ""):
+        return 0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _effective_hours(row: Dict[str, Any]) -> float:
+    total = _as_float(row.get("total_hrs_per_week"))
+    if total:
+        return total
+    return _as_float(row.get("theory_hrs")) + _as_float(row.get("lab_hrs")) + _as_float(row.get("tutorial_hrs"))
+
 
 class LoadManagementCrew:
-    def __init__(self):
-        self.llm = get_llm()
-        
-    def create_agents(self):
-        calculator = Agent(
-            role="Load Calculator",
-            goal="Analyze the faculty-subject mappings and accurately calculate the exact teaching hours required for each mapping based on the curriculum. Theory hours depend on the subject, while labs/tutorials usually count as 2/1 hours per specific batch mapped.",
-            backstory="An expert in academic workload calculation who computes the exact hour commitments for each assigned class, lab, or tutorial.",
-            verbose=True,
-            llm=self.llm,
-            allow_delegation=False
+    def calculate_and_validate_load(self, load_distribution_data: List[Dict[str, Any]]) -> str:
+        """Summarize persisted load-distribution rows for timetable preparation."""
+        row_summaries: List[LoadDistributionRowSummary] = []
+        faculty_totals: dict[str, dict[str, Any]] = defaultdict(
+            lambda: {
+                "total_rows": 0,
+                "total_theory_hours": 0.0,
+                "total_lab_hours": 0.0,
+                "total_tutorial_hours": 0.0,
+                "total_effective_hours": 0.0,
+                "divisions": set(),
+            }
         )
-        
-        validator = Agent(
-            role="Validation Agent",
-            goal="Sum the calculated hours for each faculty and verify if the assigned load exactly hits their required target load (Professor: 14h, Associate: 18h, Assistant: 20h or 22h). If a faculty is underloaded or overloaded, determine the discrepancy. Produce a final structured JSON report.",
-            backstory="A strict human resources auditor who compares every computed hour against faculty target load requirements. Produces final, clean, structured JSON reports. You ALWAYS return ONLY raw JSON, with no markdown formatting like ```json.",
-            verbose=True,
-            llm=self.llm,
-            allow_delegation=False
-        )
-        
-        return calculator, validator
 
-    def calculate_and_validate_load(self, curriculum_data: Dict[str, Any], faculties_data: List[Dict[str, Any]], mapping_data: List[Dict[str, Any]]) -> str:
-        """
-        Main entry point to run the crew to calculate loads for existing mappings.
-        curriculum_data should include subjects, divisions, and batch records.
-        faculties_data should include faculty records with priority_level.
-        mapping_data should include the existing faculty-subject-division-batch assignments.
-        """
-        calculator, validator = self.create_agents()
+        for row in load_distribution_data:
+            faculty_name = str(row.get("faculty_name") or "").strip()
+            if not faculty_name:
+                continue
 
-        # Task 1: Calculate Load
-        task1 = Task(
-            description=f"Analyze these existing faculty-subject mappings and determine the TOTAL teaching hours assigned to each mapping. \n\nCurriculum Data: {json.dumps(curriculum_data, indent=2)}\n\nMapping Data: {json.dumps(mapping_data, indent=2)}\n\nRule: For EACH mapping record, look up the subject's required hours for the given session_type (THEORY, LAB, TUTORIAL). If it's THEORY for a division, use the subject's theory_hours. If it's LAB/TUTORIAL for a specific batch, use the subject's lab/tutorial hours. Produce a detailed list of how many hours each individual mapping record consumes.",
-            expected_output="A structured breakdown listing each mapping and its precisely calculated hours.",
-            agent=calculator
-        )
-        
-        # Task 2: Validate against limits
-        task2 = Task(
-            description=f"Take the calculated hours for all mappings from the Load Calculator. Group the mappings by faculty. Calculate the total assigned hours for each faculty. Compare this against their REQUIRED target load based on their designation/priority level (Professor/Priority 1: 14h, Associate/Priority 2: 18h, Assistant/Priority 3/4: 20h or 22h). \n\nFaculty Data: {json.dumps(faculties_data, indent=2)}\n\nIdentify if any faculty is 'Underloaded', 'Overloaded', or 'Perfect' and set the `load_status` string field accordingly. State any discrepancy notes in the notes field. DO NOT WRAP THE JSON IN MARKDOWN.",
-            expected_output="The final Output JSON mapping faculties, their total computed hours, their target_load, load_status (Underloaded/Overloaded/Perfect) and any validation notes. MUST BE RAW JSON. NO CODE BLOCKS.",
-            agent=validator,
-            context=[task1],
-            output_json=LoadAssignmentOutput
-        )
-        
-        crew = Crew(
-            agents=[calculator, validator],
-            tasks=[task1, task2],
-            process=Process.sequential,
-            verbose=True
-        )
-        
-        # Kickoff the crew
-        result = crew.kickoff()
-        
-        return result.raw
+            theory_hrs = _as_float(row.get("theory_hrs"))
+            lab_hrs = _as_float(row.get("lab_hrs"))
+            tutorial_hrs = _as_float(row.get("tutorial_hrs"))
+            effective_hours = _effective_hours(row)
+            division = str(row.get("division") or "").strip()
+            normalized_division = _normalize_division(division)
+
+            row_summaries.append(
+                LoadDistributionRowSummary(
+                    faculty_name=faculty_name,
+                    year=str(row.get("year") or "").strip() or None,
+                    division=division or None,
+                    normalized_division=normalized_division or None,
+                    subject=str(row.get("subject") or "").strip() or None,
+                    batch=str(row.get("batch") or "").strip() or None,
+                    theory_hrs=theory_hrs,
+                    lab_hrs=lab_hrs,
+                    tutorial_hrs=tutorial_hrs,
+                    total_hrs_per_week=_as_float(row.get("total_hrs_per_week")),
+                    effective_hours=effective_hours,
+                )
+            )
+
+            faculty_summary = faculty_totals[faculty_name]
+            faculty_summary["total_rows"] += 1
+            faculty_summary["total_theory_hours"] += theory_hrs
+            faculty_summary["total_lab_hours"] += lab_hrs
+            faculty_summary["total_tutorial_hours"] += tutorial_hrs
+            faculty_summary["total_effective_hours"] += effective_hours
+            if normalized_division:
+                faculty_summary["divisions"].add(normalized_division)
+
+        faculty_summaries = [
+            FacultyLoadSummary(
+                faculty_name=faculty_name,
+                total_rows=summary["total_rows"],
+                total_theory_hours=summary["total_theory_hours"],
+                total_lab_hours=summary["total_lab_hours"],
+                total_tutorial_hours=summary["total_tutorial_hours"],
+                total_effective_hours=summary["total_effective_hours"],
+                divisions=sorted(summary["divisions"]),
+            )
+            for faculty_name, summary in sorted(faculty_totals.items(), key=lambda item: item[0].lower())
+        ]
+
+        return LoadAssignmentOutput(
+            rows=row_summaries,
+            faculty_summaries=faculty_summaries,
+            validation_passed=bool(row_summaries),
+            notes="Load distribution summarized from persisted rows. Faculty table is no longer required for this flow.",
+        ).model_dump_json()

@@ -58,6 +58,13 @@ class FacultyUpdate(BaseModel):
     target_other_load: int | None = None
 
 
+class LoadDistributionSubmitRequest(BaseModel):
+    """Submit request for bulk load-distribution records."""
+
+    columns: list[str]
+    rows: list[dict[str, Any]]
+
+
 CSV_HEADER_ALIASES: dict[str, list[str]] = {
     "faculty_code": ["faculty_code", "faculty code", "faculty id", "code"],
     "faculty_name": ["faculty_name", "faculty name", "name", "full name"],
@@ -81,6 +88,19 @@ CSV_HEADER_ALIASES: dict[str, list[str]] = {
 }
 
 
+LOAD_DISTRIBUTION_HEADER_ALIASES: dict[str, list[str]] = {
+    "faculty_name": ["faculty name", "faculty_name", "name"],
+    "year": ["year", "academic year"],
+    "division": ["division", "div"],
+    "subject": ["subject", "subject name", "course", "course name"],
+    "theory_hours": ["theory hours", "theory hour", "theory", "theory load", "theory hrs", "theory hr"],
+    "lab_hours": ["lab hours", "lab hour", "lab", "laboratory load", "laboratory hours", "lab hrs", "lab hr"],
+    "tutorial_hours": ["tutorial hours", "tutorial hour", "tutorial", "tutorial load", "tutorial hrs", "tutorial hr"],
+    "batch": ["batch", "batch code", "batch_id"],
+    "total_hours_per_week": ["total hrs/week", "total hours/week", "total hrs per week", "total hours per week", "total load", "total hrs"],
+}
+
+
 def _normalize_header(value: str) -> str:
     return " ".join(value.strip().lower().replace("_", " ").split())
 
@@ -99,6 +119,218 @@ def _clean_cell_value(value: Any) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value).strip()
+
+
+def _looks_numeric_string(value: str) -> bool:
+    if not value:
+        return False
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_row_all_numeric(values: list[str]) -> bool:
+    non_empty = [value for value in values if value]
+    if not non_empty:
+        return False
+    return all(_looks_numeric_string(value) for value in non_empty)
+
+
+def _make_unique_headers(headers: list[str]) -> list[str]:
+    unique_headers: list[str] = []
+    for index, header in enumerate(headers, start=1):
+        cleaned = _clean_cell_value(header)
+        if not cleaned:
+            cleaned = f"column_{index}"
+
+        candidate = cleaned
+        suffix = 2
+        while candidate in unique_headers:
+            candidate = f"{cleaned}_{suffix}"
+            suffix += 1
+        unique_headers.append(candidate)
+    return unique_headers
+
+
+def _select_load_distribution_header_index(rows_2d: list[list[str]]) -> int:
+    best_index = -1
+    best_score = -1
+
+    for index, row in enumerate(rows_2d[:50]):
+        if not any(row):
+            continue
+
+        normalized_row = {_normalize_header(value) for value in row if value}
+        alias_hits = 0
+        has_faculty = False
+
+        for canonical_key, aliases in LOAD_DISTRIBUTION_HEADER_ALIASES.items():
+            alias_matched = any(_normalize_header(alias) in normalized_row for alias in aliases)
+            if alias_matched:
+                alias_hits += 1
+            if canonical_key == "faculty_name" and alias_matched:
+                has_faculty = True
+
+        score = alias_hits * 10 + len(normalized_row)
+        if has_faculty:
+            score += 5
+
+        if score > best_score:
+            best_score = score
+            best_index = index
+
+    if best_index == -1:
+        raise ValueError("No header row detected in uploaded file.")
+
+    return best_index
+
+
+def _parse_load_distribution_csv(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    decoded_content = content.decode("utf-8-sig")
+    csv_reader = csv.DictReader(io.StringIO(decoded_content))
+    if not csv_reader.fieldnames:
+        raise ValueError("CSV file has no headers.")
+
+    columns = [header.strip() for header in csv_reader.fieldnames if header and header.strip()]
+    rows = [{key: _clean_cell_value(value) for key, value in row.items()} for row in csv_reader]
+    return columns, rows
+
+
+def _parse_load_distribution_xlsx(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    workbook = load_workbook(io.BytesIO(content), data_only=True)
+    worksheet = workbook.worksheets[0]
+
+    rows_2d: list[list[str]] = []
+    for row in worksheet.iter_rows(values_only=True):
+        rows_2d.append([_clean_cell_value(value) for value in row])
+
+    if not rows_2d:
+        raise ValueError("XLSX file is empty.")
+
+    header_index = _select_load_distribution_header_index(rows_2d)
+    raw_headers = rows_2d[header_index]
+    columns = _make_unique_headers(raw_headers)
+
+    data_rows: list[dict[str, str]] = []
+    for row in rows_2d[header_index + 1 :]:
+        if not any(row):
+            continue
+        row_map = {
+            columns[col_index]: row[col_index] if col_index < len(row) else ""
+            for col_index in range(len(columns))
+        }
+        if _is_row_all_numeric(list(row_map.values())):
+            continue
+        data_rows.append(row_map)
+
+    return columns, data_rows
+
+
+def _build_load_distribution_header_map(columns: list[str]) -> dict[str, str]:
+    normalized_headers = {_normalize_header(column): column for column in columns if column and column.strip()}
+    header_map: dict[str, str] = {}
+    missing_keys: list[str] = []
+
+    for canonical_key, aliases in LOAD_DISTRIBUTION_HEADER_ALIASES.items():
+        actual_key = _find_header_key(normalized_headers, aliases)
+        if not actual_key:
+            missing_keys.append(canonical_key)
+            continue
+        header_map[canonical_key] = actual_key
+
+    if missing_keys:
+        required = ", ".join(missing_keys)
+        raise ValueError(f"Missing required columns: {required}")
+
+    return header_map
+
+
+def _parse_non_negative_number(value: Any, column_name: str, row_number: int) -> float:
+    cleaned = _clean_cell_value(value)
+    if not cleaned:
+        return 0.0
+    try:
+        parsed = float(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"Row {row_number}: Invalid number in '{column_name}'") from exc
+    if parsed < 0:
+        raise ValueError(f"Row {row_number}: '{column_name}' cannot be negative")
+    return parsed
+
+
+def _validate_and_transform_load_rows(
+    rows: list[dict[str, Any]],
+    header_map: dict[str, str],
+    current_user: CurrentUser,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    records: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    for row_index, row in enumerate(rows, start=2):
+        try:
+            faculty_name = _clean_cell_value(row.get(header_map["faculty_name"]))
+            year = _clean_cell_value(row.get(header_map["year"]))
+            division = _clean_cell_value(row.get(header_map["division"]))
+            subject = _clean_cell_value(row.get(header_map["subject"]))
+
+            if not faculty_name:
+                raise ValueError(f"Row {row_index}: Faculty Name is required")
+            if not year:
+                raise ValueError(f"Row {row_index}: Year is required")
+            if not division:
+                raise ValueError(f"Row {row_index}: Division is required")
+            if not subject:
+                raise ValueError(f"Row {row_index}: Subject is required")
+
+            theory_hours = _parse_non_negative_number(
+                row.get(header_map["theory_hours"]),
+                "Theory Hours",
+                row_index,
+            )
+            lab_hours = _parse_non_negative_number(
+                row.get(header_map["lab_hours"]),
+                "Lab Hours",
+                row_index,
+            )
+            tutorial_hours = _parse_non_negative_number(
+                row.get(header_map["tutorial_hours"]),
+                "Tutorial Hours",
+                row_index,
+            )
+
+            batch = ""
+            if "batch" in header_map:
+                batch = _clean_cell_value(row.get(header_map["batch"]))
+
+            total_hours_per_week = theory_hours + lab_hours + tutorial_hours
+            if "total_hours_per_week" in header_map:
+                total_hours_per_week = _parse_non_negative_number(
+                    row.get(header_map["total_hours_per_week"]),
+                    "Total Hrs/Week",
+                    row_index,
+                )
+
+            records.append(
+                {
+                    "faculty_name": faculty_name,
+                    "year": year,
+                    "division": division,
+                    "subject": subject,
+                    "theory_hrs": theory_hours,
+                    "lab_hrs": lab_hours,
+                    "tutorial_hrs": tutorial_hours,
+                    "batch": batch or None,
+                    "total_hrs_per_week": total_hours_per_week,
+                    "source_row": {key: _clean_cell_value(value) for key, value in row.items()},
+                    "uploaded_by": current_user.uid,
+                }
+            )
+        except ValueError as error:
+            errors.append(str(error))
+
+    return records, errors
 
 
 def _extract_department_hint(text: str | None) -> str | None:
@@ -635,6 +867,160 @@ async def upload_faculty_csv(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"CSV processing failed: {str(e)}",
         )
+
+
+@router.post("/load-distribution/preview", response_model=SuccessResponse)
+async def preview_load_distribution_upload(
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Parse CSV/XLSX and return dynamic table columns/rows for preview."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File name is required.")
+
+    file_name = file.filename.lower()
+    if not (file_name.endswith(".csv") or file_name.endswith(".xlsx")):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV or XLSX file.")
+
+    try:
+        content = await file.read()
+        if file_name.endswith(".csv"):
+            columns, rows = _parse_load_distribution_csv(content)
+        else:
+            columns, rows = _parse_load_distribution_xlsx(content)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="Uploaded file has no data rows.")
+
+        _build_load_distribution_header_map(columns)
+
+        return {
+            "data": {
+                "columns": columns,
+                "rows": rows,
+                "total_rows": len(rows),
+            },
+            "message": "Load distribution file parsed successfully.",
+        }
+    except HTTPException:
+        raise
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(error)}") from error
+
+
+@router.post("/load-distribution/submit", response_model=SuccessResponse)
+async def submit_load_distribution(
+    payload: LoadDistributionSubmitRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Validate uploaded rows and insert into load_distribution table."""
+    if not payload.rows:
+        raise HTTPException(status_code=400, detail="No rows provided for submission.")
+
+    try:
+        supabase = get_service_supabase()
+        existing_rows = (
+            supabase.table("load_distribution")
+            .select("load_distribution_id")
+            .eq("uploaded_by", current_user.uid)
+            .limit(1)
+            .execute()
+        )
+        if existing_rows.data:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Existing load data found. Please delete previous data using 'New Load' before submitting new data."
+                ),
+            )
+
+        header_map = _build_load_distribution_header_map(payload.columns)
+        records, errors = _validate_and_transform_load_rows(payload.rows, header_map, current_user)
+
+        if errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Validation failed for uploaded rows.",
+                    "errors": errors,
+                },
+            )
+
+        response = supabase.table("load_distribution").insert(records).execute()
+
+        created_count = len(response.data or [])
+        return {
+            "data": {
+                "inserted": created_count,
+                "total_rows": len(records),
+            },
+            "message": f"Inserted {created_count} load distribution records.",
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Failed to insert into 'load_distribution'. Ensure the table exists with columns: "
+                "faculty_name, year, division, subject, theory_hrs, lab_hrs, tutorial_hrs, batch, total_hrs_per_week, source_row, uploaded_by. "
+                f"Original error: {str(error)}"
+            ),
+        ) from error
+
+
+@router.get("/load-distribution", response_model=SuccessResponse)
+async def get_load_distribution(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Fetch current coordinator load-distribution rows from DB."""
+    try:
+        supabase = get_service_supabase()
+        response = (
+            supabase.table("load_distribution")
+            .select("*")
+            .eq("uploaded_by", current_user.uid)
+            .order("created_at", desc=False)
+            .execute()
+        )
+
+        return {
+            "data": response.data or [],
+            "message": "Load distribution fetched successfully.",
+        }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch load distribution: {str(error)}",
+        ) from error
+
+
+@router.delete("/load-distribution", response_model=SuccessResponse)
+async def clear_load_distribution(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Delete current coordinator load-distribution rows from DB."""
+    try:
+        supabase = get_service_supabase()
+        response = (
+            supabase.table("load_distribution")
+            .delete()
+            .eq("uploaded_by", current_user.uid)
+            .execute()
+        )
+
+        deleted_count = len(response.data or [])
+        return {
+            "data": {"deleted": deleted_count},
+            "message": f"Deleted {deleted_count} load distribution rows.",
+        }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to clear load distribution: {str(error)}",
+        ) from error
 
 
 @router.get("/{faculty_id}", response_model=SuccessResponse)
