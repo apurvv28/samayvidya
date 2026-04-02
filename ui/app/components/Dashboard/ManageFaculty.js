@@ -34,10 +34,6 @@ export default function ManageFaculty() {
   const [previewBackupRows, setPreviewBackupRows] = useState([]);
   const [uploadSummary, setUploadSummary] = useState(null);
 
-  useEffect(() => {
-    fetchLoadDistributionFromDb();
-  }, [fetchLoadDistributionFromDb]);
-
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token;
@@ -78,6 +74,10 @@ export default function ManageFaculty() {
       setLoading(false);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    fetchLoadDistributionFromDb();
+  }, [fetchLoadDistributionFromDb]);
 
   const handleFileChange = (e) => {
     if (dbRows.length > 0) {
