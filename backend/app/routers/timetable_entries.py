@@ -38,12 +38,16 @@ class TimetableEntryUpdate(BaseModel):
 
 @router.get("", response_model=SuccessResponse)
 async def list_timetable_entries(
+    version_id: str | None = None,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """List all timetable entries (RLS enforced)."""
     try:
         supabase = get_user_supabase()
-        response = supabase.table("timetable_entries").select("*").execute()
+        query = supabase.table("timetable_entries").select("*")
+        if version_id:
+            query = query.eq("version_id", version_id)
+        response = query.execute()
         return {
             "data": response.data,
             "message": "Timetable entries retrieved successfully",

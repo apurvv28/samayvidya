@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Upload, FileText, X, Loader2 } from 'lucide-react';
-import { supabase } from '../../utils/supabase';
 import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -34,26 +33,10 @@ export default function ManageFaculty() {
   const [previewBackupRows, setPreviewBackupRows] = useState([]);
   const [uploadSummary, setUploadSummary] = useState(null);
 
-  const getAuthToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
-
   const fetchLoadDistributionFromDb = useCallback(async () => {
     try {
       setLoading(true);
-      const token = await getAuthToken();
-      if (!token) {
-        setDbColumns([]);
-        setDbRows([]);
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/faculty/load-distribution`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(`${API_BASE_URL}/faculty/load-distribution`);
 
       const json = await response.json();
       if (!response.ok) {
@@ -105,20 +88,12 @@ export default function ManageFaculty() {
 
     try {
       setUploading(true);
-      const token = await getAuthToken();
-      if (!token) {
-        showToast('Authentication failed. Please log in again.', 'error');
-        return;
-      }
 
       const formData = new FormData();
       formData.append('file', loadDistributionFile);
 
       const response = await fetch(`${API_BASE_URL}/faculty/load-distribution/preview`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 
@@ -179,17 +154,11 @@ export default function ManageFaculty() {
 
     try {
       setSubmitting(true);
-      const token = await getAuthToken();
-      if (!token) {
-        showToast('Authentication failed. Please log in again.', 'error');
-        return;
-      }
 
       const response = await fetch(`${API_BASE_URL}/faculty/load-distribution/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           columns: previewColumns,
@@ -229,17 +198,8 @@ export default function ManageFaculty() {
   const handleConfirmNewLoad = async () => {
     try {
       setClearingLoadData(true);
-      const token = await getAuthToken();
-      if (!token) {
-        showToast('Authentication failed. Please log in again.', 'error');
-        return;
-      }
-
       const response = await fetch(`${API_BASE_URL}/faculty/load-distribution`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const json = await response.json();

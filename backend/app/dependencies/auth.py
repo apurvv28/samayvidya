@@ -2,6 +2,8 @@
 from fastapi import Request, HTTPException, status
 from jwt import decode, DecodeError, ExpiredSignatureError
 from pydantic import BaseModel
+from uuid import UUID
+from app.config import settings
 
 
 class CurrentUser(BaseModel):
@@ -34,8 +36,21 @@ async def get_current_user(request: Request) -> CurrentUser:
     """
     # Extract Authorization header
     auth_header = request.headers.get("authorization")
+
+    def _safe_anonymous_uid() -> str:
+        candidate = (settings.anonymous_user_id or "").strip()
+        try:
+            return str(UUID(candidate))
+        except ValueError:
+            return "00000000-0000-0000-0000-000000000000"
     
     if not auth_header:
+        if settings.allow_anonymous_api:
+            return CurrentUser(
+                uid=_safe_anonymous_uid(),
+                email=settings.anonymous_user_email,
+                aud="anonymous",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authorization header",

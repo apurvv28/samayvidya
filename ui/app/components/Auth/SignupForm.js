@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Lock, ArrowRight, Phone, Building2, Briefcase, Loader2 } from 'lucide-react';
-import { supabase } from '../../utils/supabase';
 
 export default function SignupForm({ onFlip }) {
   const [loading, setLoading] = useState(false);

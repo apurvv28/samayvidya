@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # FastAPI
     debug: bool = True
     environment: str = "development"
+    allow_anonymous_api: bool = True
+    anonymous_user_id: str = "00000000-0000-0000-0000-000000000000"
+    anonymous_user_email: str = "anonymous@local"
 
     # Email
     smtp_server: str
@@ -22,7 +25,7 @@ class Settings(BaseSettings):
 
     # Agent API Keys
     groq_api_key: str | None = None
-    openai_api_key: str | None = None
+    groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     class Config:
         env_file = ".env"

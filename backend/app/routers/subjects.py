@@ -8,6 +8,21 @@ from app.schemas.common import SuccessResponse, SubjectTypeEnum
 router = APIRouter(prefix="/subjects", tags=["subjects"])
 
 
+def _expand_year_aliases(year: str) -> list[str]:
+    normalized = (year or "").strip()
+    lowered = normalized.casefold()
+
+    aliases: set[str] = {normalized, lowered}
+    if lowered in {"sy", "second year", "second year (sy)"}:
+        aliases.update({"SY", "sy", "Second Year", "second year", "Second Year (SY)", "second year (sy)"})
+    elif lowered in {"ty", "third year", "third year (ty)"}:
+        aliases.update({"TY", "ty", "Third Year", "third year", "Third Year (TY)", "third year (ty)"})
+    elif lowered in {"btech", "b.tech", "b tech", "be", "b.e."}:
+        aliases.update({"BTech", "btech", "B.Tech", "b.tech", "B Tech", "b tech", "BE", "be", "B.E.", "b.e."})
+
+    return sorted(aliases)
+
+
 class SubjectCreate(BaseModel):
     """Create subject request."""
 
@@ -26,6 +41,7 @@ class SubjectCreate(BaseModel):
     is_theory_online: bool = False
     is_lab_online: bool = False
     is_tutorial_online: bool = False
+    sub_short_form: str | None = None
 
 
 class SubjectUpdate(BaseModel):
@@ -43,6 +59,7 @@ class SubjectUpdate(BaseModel):
     is_theory_online: bool | None = None
     is_lab_online: bool | None = None
     is_tutorial_online: bool | None = None
+    sub_short_form: str | None = None
 
 
 @router.get("", response_model=SuccessResponse)
@@ -54,13 +71,18 @@ async def list_subjects(
         # Use service client to bypass RLS and ensure visibility
         supabase = get_service_supabase()
         
-        # Fetch subjects with department details
-        query = supabase.table("subjects").select("*, departments(department_name)")
+        # Fetch subjects from public.subjects with department name for semester view.
+        query = supabase.table("subjects").select(
+            "subject_id, subject_name, subject_type, credits, hours_per_week, requires_continuity, "
+            "department_id, theory_hours, lab_hours, tutorial_hours, year, delivery_mode, "
+            "is_theory_online, is_lab_online, is_tutorial_online, sub_short_form, "
+            "departments(department_name)"
+        )
         
         if year:
-            query = query.eq("year", year)
+            query = query.in_("year", _expand_year_aliases(year))
             
-        response = query.execute()
+        response = query.order("subject_name").execute()
         return {"data": response.data, "message": "Subjects retrieved successfully"}
     except Exception as e:
         raise HTTPException(

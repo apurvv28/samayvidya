@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../../utils/supabase';
 
 export default function Semester() {
   const [year, setYear] = useState('SY');
@@ -76,14 +75,8 @@ export default function Semester() {
     if (!confirm('Are you sure you want to delete this subject?')) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      
       const response = await fetch(`http://localhost:8000/subjects/${id}`, {
-          method: 'DELETE',
-          headers: {
-              'Authorization': `Bearer ${token}`
-          }
+                    method: 'DELETE'
       });
 
       if (!response.ok) {
@@ -103,9 +96,6 @@ export default function Semester() {
     setSubmitting(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
       // Prepare payload matches Backend Pydantic model
       const payload = {
           subject_id: formData.subject_id,
@@ -131,8 +121,7 @@ export default function Semester() {
       const response = await fetch('http://localhost:8000/subjects', {
           method: 'POST',
           headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
+              'Content-Type': 'application/json'
           },
           body: JSON.stringify(payload) 
       });

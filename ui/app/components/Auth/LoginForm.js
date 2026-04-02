@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
 
 export default function LoginForm({ onFlip }) {
   const router = useRouter();
@@ -25,48 +24,20 @@ export default function LoginForm({ onFlip }) {
     setLoading(true);
 
     try {
-        // 1. Sign in
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email: formData.email,
-            password: formData.password
-        });
-
-        if (authError) throw authError;
-
-        // 2. Fetch User Profile for Role
-        const userId = authData.user.id;
-        
-        const { data: profile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('role')
-            .eq('user_id', userId)
-            .single();
-
-        // 3. Redirect based on Role
-        // Fallback to metadata or guess if profile missing (e.g. fresh signup)
-        let role = profile?.role;
-        if (!role && authData.user.user_metadata?.role) {
-             const metaRole = authData.user.user_metadata.role;
-             if (metaRole === 'Student') role = 'STUDENT';
-             else if (metaRole === 'FACULTY') role = 'FACULTY';
-             else if (metaRole === 'Head of Dept' || metaRole === 'Time Table Coordinator') role = 'COORDINATOR';
-        }
-
-        if (role === 'STUDENT') {
-            router.push('/dashboard/student');
-        } else if (role === 'FACULTY') {
-            router.push('/dashboard/faculty');
-        } else if (role === 'HOD' || role === 'COORDINATOR' || role === 'ADMIN') {
-            router.push('/dashboard/coordinator');
+        // Frontend auth is disabled in backend-only mode.
+        // Route by a simple email convention until server-side auth is added.
+        const email = formData.email.toLowerCase();
+        if (email.includes('student')) {
+          router.push('/dashboard/student');
+        } else if (email.includes('faculty')) {
+          router.push('/dashboard/faculty');
         } else {
-            // Default fallback
-            console.warn("Unknown role, defaulting to student dashboard");
-            router.push('/dashboard/student');
+          router.push('/dashboard/coordinator');
         }
 
     } catch (err) {
         console.error(err);
-        setError(err.message === "Invalid login credentials" ? "Invalid email or password" : err.message);
+        setError(err.message || 'Login failed');
     } finally {
         setLoading(false);
     }

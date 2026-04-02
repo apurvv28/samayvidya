@@ -7,12 +7,17 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from openpyxl import load_workbook
 from pydantic import BaseModel
+from app.config import settings
 from app.dependencies.auth import get_current_user, CurrentUser
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, FacultyRoleEnum, SubjectTypeEnum
 from app.services.email_service import send_faculty_credentials
 
 router = APIRouter(prefix="/faculty", tags=["faculty"])
+
+
+def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
+    return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
 class FacultyCreate(BaseModel):
@@ -921,13 +926,10 @@ async def submit_load_distribution(
 
     try:
         supabase = get_service_supabase()
-        existing_rows = (
-            supabase.table("load_distribution")
-            .select("load_distribution_id")
-            .eq("uploaded_by", current_user.uid)
-            .limit(1)
-            .execute()
-        )
+        existing_query = supabase.table("load_distribution").select("load_distribution_id").limit(1)
+        if not _is_anonymous_mode_user(current_user):
+            existing_query = existing_query.eq("uploaded_by", current_user.uid)
+        existing_rows = existing_query.execute()
         if existing_rows.data:
             raise HTTPException(
                 status_code=400,
@@ -978,13 +980,10 @@ async def get_load_distribution(
     """Fetch current coordinator load-distribution rows from DB."""
     try:
         supabase = get_service_supabase()
-        response = (
-            supabase.table("load_distribution")
-            .select("*")
-            .eq("uploaded_by", current_user.uid)
-            .order("created_at", desc=False)
-            .execute()
-        )
+        query = supabase.table("load_distribution").select("*")
+        if not _is_anonymous_mode_user(current_user):
+            query = query.eq("uploaded_by", current_user.uid)
+        response = query.order("created_at", desc=False).execute()
 
         return {
             "data": response.data or [],
@@ -1004,12 +1003,10 @@ async def clear_load_distribution(
     """Delete current coordinator load-distribution rows from DB."""
     try:
         supabase = get_service_supabase()
-        response = (
-            supabase.table("load_distribution")
-            .delete()
-            .eq("uploaded_by", current_user.uid)
-            .execute()
-        )
+        query = supabase.table("load_distribution").delete()
+        if not _is_anonymous_mode_user(current_user):
+            query = query.eq("uploaded_by", current_user.uid)
+        response = query.execute()
 
         deleted_count = len(response.data or [])
         return {

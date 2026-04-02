@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../utils/supabase';
 import { Upload, FileText, CheckCircle, PlusCircle } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
@@ -29,17 +28,9 @@ export default function AddDivision() {
     fetchDepartments();
   }, []);
 
-  const getAuthToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
-
   const fetchDepartments = async () => {
     try {
-        const token = await getAuthToken();
-        const response = await fetch(`${API_BASE_URL}/departments`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+                const response = await fetch(`${API_BASE_URL}/departments`);
         if (response.ok) {
             const data = await response.json();
             setDepartments(data.data || []);
@@ -84,20 +75,12 @@ export default function AddDivision() {
 
     try {
         setLoading(true);
-        const token = await getAuthToken();
-        
-        if (!token) {
-            showToast('Authentication failed. Please log in again.', 'error');
-            setLoading(false);
-            return;
-        }
 
         // 1. Create Division
         const divResponse = await fetch(`${API_BASE_URL}/divisions`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(divisionData)
         });
@@ -114,9 +97,6 @@ export default function AddDivision() {
             
             const uploadResponse = await fetch(`${API_BASE_URL}/divisions/${divisionId}/students/upload`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
                 body: formData
             });
             

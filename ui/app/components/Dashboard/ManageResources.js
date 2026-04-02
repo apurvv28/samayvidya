@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Building2, Plus, Monitor, GraduationCap, X, Loader2, Trash2 } from 'lucide-react';
-import { supabase } from '../../utils/supabase';
 import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -27,20 +26,13 @@ export default function ManageResources() {
       fetchData();
   }, []);
 
-  const getAuthToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
-
   const fetchData = async () => {
       try {
           setLoading(true);
-          const token = await getAuthToken();
-          const headers = { 'Authorization': `Bearer ${token}` };
 
           const [roomsRes, deptsRes] = await Promise.all([
-              fetch(`${API_BASE_URL}/rooms`, { headers }),
-              fetch(`${API_BASE_URL}/departments`, { headers })
+              fetch(`${API_BASE_URL}/rooms`),
+              fetch(`${API_BASE_URL}/departments`)
           ]);
 
           if (roomsRes.ok) {
@@ -78,8 +70,7 @@ export default function ManageResources() {
 
       try {
           setSubmitting(true);
-          const token = await getAuthToken();
-          
+
           const payload = {
               ...newRoom,
               room_type: resourceType // Ensure type matches the modal context
@@ -88,8 +79,7 @@ export default function ManageResources() {
           const response = await fetch(`${API_BASE_URL}/rooms`, {
               method: 'POST',
               headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
+                  'Content-Type': 'application/json'
               },
               body: JSON.stringify(payload)
           });
@@ -117,12 +107,8 @@ export default function ManageResources() {
       if (!confirm("Are you sure you want to delete this resource?")) return;
 
       try {
-          const token = await getAuthToken();
           const response = await fetch(`${API_BASE_URL}/rooms/${roomId}`, {
-              method: 'DELETE',
-              headers: {
-                  'Authorization': `Bearer ${token}`
-              }
+              method: 'DELETE'
           });
 
           if (!response.ok) {
