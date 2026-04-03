@@ -1,11 +1,16 @@
 """Days management routes (reference data)."""
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
+from app.config import settings
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 
 router = APIRouter(prefix="/days", tags=["days"])
+
+
+def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
+    return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
 class DayCreate(BaseModel):
@@ -28,7 +33,7 @@ async def list_days(
 ) -> dict:
     """List all days (RLS enforced)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = supabase.table("days").select("*").execute()
         return {"data": response.data, "message": "Days retrieved successfully"}
     except Exception as e:
@@ -45,7 +50,7 @@ async def get_day(
 ) -> dict:
     """Get a specific day by ID."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("days")
             .select("*")
@@ -68,7 +73,7 @@ async def create_day(
 ) -> dict:
     """Create a new day."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = supabase.table("days").insert(day.model_dump()).execute()
         return {"data": response.data, "message": "Day created successfully"}
     except Exception as e:
@@ -86,7 +91,7 @@ async def update_day(
 ) -> dict:
     """Update a day."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         update_data = day.model_dump(exclude_unset=True)
         response = (
             supabase.table("days")
@@ -109,7 +114,7 @@ async def delete_day(
 ) -> dict:
     """Delete a day."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("days").delete().eq("day_id", day_id).execute()
         )

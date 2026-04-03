@@ -21,6 +21,7 @@ from app.routers import (
     campus_events,
     academic_years,
     agent_routes,
+    pdf,
 )
 from app.config import settings
 
@@ -95,6 +96,7 @@ app.include_router(faculty_leaves.router)
 app.include_router(campus_events.router)
 app.include_router(academic_years.router)
 app.include_router(agent_routes.router)
+app.include_router(pdf.router)
 
 
 @app.exception_handler(Exception)

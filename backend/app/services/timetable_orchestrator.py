@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterator
+import re
+from typing import Any, Iterator
 from uuid import uuid4
 
 from app.config import settings
@@ -36,13 +37,128 @@ def _normalize_text(value: object) -> str:
     return str(value or "").strip().casefold()
 
 
+def _normalize_year_level(value: object) -> str:
+    normalized = _normalize_text(value)
+    if normalized in {"sy", "second year", "second year (sy)", "second year sy"}:
+        return "SY"
+    if normalized in {"ty", "third year", "third year (ty)", "third year ty"}:
+        return "TY"
+    if normalized in {"fy", "first year", "first year (fy)", "first year fy"}:
+        return "FY"
+    if normalized in {"ly", "last year", "last year (ly)", "last year ly"}:
+        return "LY"
+    upper = str(value or "").strip().upper()
+    if upper in {"SY", "TY", "FY", "LY"}:
+        return upper
+    return upper
+
+
+def _compact_token(value: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", _normalize_text(value))
+
+
+def _subject_code_from_load(value: object) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return raw.split("-")[0].strip().casefold()
+
+
+def _division_level_from_name(value: object) -> str:
+    normalized = str(value or "").strip().upper()
+    for prefix in ("SY-", "TY-", "FY-", "LY-"):
+        if normalized.startswith(prefix):
+            return prefix[:-1]
+    return ""
+
+
+def _division_base_name(value: object) -> str:
+    normalized = str(value or "").strip().upper()
+    for prefix in ("SY-", "TY-", "FY-", "LY-"):
+        if normalized.startswith(prefix):
+            return normalized[len(prefix) :]
+    return normalized
+
+
 @dataclass
 class _SessionTask:
     division_id: str
     faculty_id: str
     subject_id: str
+    year_level: str
     batch_id: str | None
     session_type: str
+    duration_slots: int = 1
+    group_id: str | None = None
+
+
+def _parse_time_to_minutes(value: object) -> int | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        hour, minute = raw.split(":")[:2]
+        return int(hour) * 60 + int(minute)
+    except (TypeError, ValueError):
+        return None
+
+
+def _slot_within_faculty_window(slot_row: dict, faculty_window: tuple[int | None, int | None]) -> bool:
+    start_limit, end_limit = faculty_window
+    slot_start = _parse_time_to_minutes(slot_row.get("start_time"))
+    slot_end = _parse_time_to_minutes(slot_row.get("end_time"))
+
+    if slot_start is None or slot_end is None:
+        return True
+    if start_limit is not None and slot_start < start_limit:
+        return False
+    if end_limit is not None and slot_end > end_limit:
+        return False
+    return True
+
+
+def _slot_within_window(slot_row: dict, window: tuple[int | None, int | None]) -> bool:
+    start_limit, end_limit = window
+    slot_start = _parse_time_to_minutes(slot_row.get("start_time"))
+    slot_end = _parse_time_to_minutes(slot_row.get("end_time"))
+
+    if slot_start is None or slot_end is None:
+        return True
+    if start_limit is not None and slot_start < start_limit:
+        return False
+    if end_limit is not None and slot_end > end_limit:
+        return False
+    return True
+
+
+def _is_gapless_day_pattern(slot_orders: set[int], lunch_slot_order: int | None) -> bool:
+    """Validate no-gap day pattern with conditional 12:00-13:00 lunch break.
+
+    Rule:
+    - If total scheduled hours for a day are > 4, lunch slot (12:00-13:00) must be free.
+    - Otherwise lunch slot can be used.
+    - No internal gaps are allowed (except the lunch gap when the >4 rule applies).
+    """
+    if not slot_orders:
+        return True
+
+    sorted_orders = sorted(slot_orders)
+    total_hours = len(sorted_orders)
+
+    if lunch_slot_order is not None and total_hours > 4:
+        if lunch_slot_order in slot_orders:
+            return False
+
+        left = [order for order in sorted_orders if order < lunch_slot_order]
+        right = [order for order in sorted_orders if order > lunch_slot_order]
+
+        if left and left != list(range(left[0], left[-1] + 1)):
+            return False
+        if right and right != list(range(right[0], right[-1] + 1)):
+            return False
+        return True
+
+    return sorted_orders == list(range(sorted_orders[0], sorted_orders[-1] + 1))
 
 
 class TimetableOrchestrationEngine:
@@ -50,6 +166,94 @@ class TimetableOrchestrationEngine:
 
     def __init__(self) -> None:
         self.supabase = get_service_supabase()
+
+    def _invoke_llm_hook(self, pass_name: str, payload: dict[str, Any], enabled: bool) -> dict[str, Any]:
+        """Best-effort LLM invocation hook for pass-level reasoning/tracing."""
+        trace = {
+            "pass": pass_name,
+            "llm_enabled": enabled and bool(settings.groq_api_key),
+            "llm_invoked": False,
+            "llm_status": "skipped",
+            "llm_provider": "groq",
+            "llm_model": settings.groq_model,
+            "llm_note": "",
+            "llm_content": "",
+        }
+
+        if not enabled:
+            trace["llm_note"] = "llm hook disabled for this run"
+            return trace
+
+        if not settings.groq_api_key:
+            trace["llm_note"] = "groq_api_key not configured"
+            return trace
+
+        try:
+            from litellm import completion
+
+            trace["llm_invoked"] = True
+            response = completion(
+                model=f"groq/{settings.groq_model}",
+                api_key=settings.groq_api_key,
+                temperature=0.2,
+                max_tokens=80,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a scheduling pass assistant. Return exactly one tag from: "
+                            "TY_FIRST, FY_FIRST, LAB_FIRST, BALANCED."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Pass={pass_name}. Payload summary={payload}",
+                    },
+                ],
+            )
+            response_text = ""
+            if getattr(response, "choices", None):
+                response_text = str(response.choices[0].message.content or "")
+            trace["llm_content"] = response_text.strip()
+            trace["llm_status"] = "ok"
+            trace["llm_note"] = trace["llm_content"] or "LLM hook executed"
+        except Exception as e:
+            trace["llm_status"] = "error"
+            trace["llm_note"] = str(e)
+
+        return trace
+
+    @staticmethod
+    def _planning_profile_from_llm(content: str) -> str:
+        normalized = _normalize_text(content).upper()
+        for token in re.findall(r"[A-Z_]+", normalized):
+            if token in {"TY_FIRST", "FY_FIRST", "LAB_FIRST", "BALANCED"}:
+                return token
+        return "TY_FIRST"
+
+    def _deterministic_validator_gate(self, pass_name: str, context: dict[str, Any]) -> dict[str, Any]:
+        """Deterministic validation gate used between passes."""
+        result = {
+            "pass": pass_name,
+            "passed": True,
+            "errors": [],
+        }
+
+        if pass_name == "PASS0":
+            sunday_non_working = context.get("sunday_non_working", False)
+            if not sunday_non_working:
+                result["passed"] = False
+                result["errors"].append("Sunday must be non-working.")
+
+        if pass_name == "PASS7":
+            if (context.get("unresolved_tasks") or 0) > 0:
+                result["passed"] = False
+                result["errors"].append("Unresolved tasks remain after scheduling.")
+            if (context.get("detected_conflicts") or 0) > 0:
+                result["passed"] = False
+                result["errors"].append("Conflicts detected after allocation.")
+
+        return result
 
     def run(
         self,
@@ -84,6 +288,9 @@ class TimetableOrchestrationEngine:
     ) -> Iterator[dict]:
         run_id = str(uuid4())
         stages: list[dict] = []
+        pass_trace: list[dict[str, Any]] = []
+        strict_gate_enabled = "strict" in (reason or "").casefold()
+        llm_hooks_enabled = bool(settings.groq_api_key) and "no-llm-hook" not in (reason or "").casefold()
 
         def emit_stage(stage_payload: dict) -> dict:
             stages.append(stage_payload)
@@ -96,7 +303,7 @@ class TimetableOrchestrationEngine:
 
         # 1) Data ingestion agent
         load_query = self.supabase.table("load_distribution").select(
-            "faculty_name, year, division, subject, theory_hrs, lab_hrs, tutorial_hrs"
+            "faculty_name, year, division, subject, theory_hrs, lab_hrs, tutorial_hrs, batch"
         )
         if user_id:
             load_query = load_query.eq("uploaded_by", user_id)
@@ -105,7 +312,7 @@ class TimetableOrchestrationEngine:
             raise ValueError("No load distribution rows found. Upload load data before creating timetable.")
 
         faculty_query = self.supabase.table("faculty").select(
-            "faculty_id, faculty_name, department_id, max_load_per_week, is_active"
+            "faculty_id, faculty_name, department_id, max_load_per_week, preferred_start_time, preferred_end_time, is_active"
         )
         if department_id:
             faculty_query = faculty_query.eq("department_id", department_id)
@@ -126,6 +333,9 @@ class TimetableOrchestrationEngine:
         room_query = self.supabase.table("rooms").select("room_id, room_type, is_active")
         room_rows = [row for row in (room_query.execute().data or []) if row.get("is_active", True)]
 
+        batch_query = self.supabase.table("batches").select("batch_id, division_id, is_active, batch_code")
+        batch_rows = [row for row in (batch_query.execute().data or []) if row.get("is_active", True)]
+
         day_rows = (
             self.supabase.table("days")
             .select("day_id, day_name, is_working_day")
@@ -135,10 +345,25 @@ class TimetableOrchestrationEngine:
             .data
             or []
         )
+        all_day_rows = (
+            self.supabase.table("days")
+            .select("day_id, day_name, is_working_day")
+            .order("day_id")
+            .execute()
+            .data
+            or []
+        )
+        all_slot_rows = (
+            self.supabase.table("time_slots")
+            .select("slot_id, slot_order, is_break, start_time, end_time")
+            .order("slot_order")
+            .execute()
+            .data
+            or []
+        )
         slot_rows = (
             self.supabase.table("time_slots")
-            .select("slot_id, slot_order, is_break")
-            .eq("is_break", False)
+            .select("slot_id, slot_order, is_break, start_time, end_time")
             .order("slot_order")
             .execute()
             .data
@@ -156,6 +381,41 @@ class TimetableOrchestrationEngine:
         if not day_rows or not slot_rows:
             raise ValueError("Days or time slots are missing. Configure reference data first.")
 
+        # PASS 0: break/sunday lock validation hook + deterministic gate
+        pass0_llm = self._invoke_llm_hook(
+            "PASS0",
+            {
+                "working_days": [row.get("day_name") for row in day_rows],
+                "all_days": [row.get("day_name") for row in all_day_rows],
+                "break_slots": [
+                    f"{str(row.get('start_time') or '')[:5]}-{str(row.get('end_time') or '')[:5]}"
+                    for row in all_slot_rows
+                    if row.get("is_break")
+                ],
+            },
+            llm_hooks_enabled,
+        )
+        pass0_gate = self._deterministic_validator_gate(
+            "PASS0",
+            {
+                "break_slots": [],
+                "sunday_non_working": any(
+                    str(row.get("day_name") or "").casefold() == "sunday" and not row.get("is_working_day", True)
+                    for row in all_day_rows
+                ),
+            },
+        )
+        pass_trace.append(
+            {
+                "pass": "PASS0",
+                "solver": "deterministic",
+                "llm": pass0_llm,
+                "gate": pass0_gate,
+            }
+        )
+        if strict_gate_enabled and not pass0_gate["passed"]:
+            raise ValueError(f"PASS0 validation failed: {pass0_gate['errors']}")
+
         yield emit_stage(
             {
                 "agent": "Data Ingestion Agent",
@@ -166,6 +426,7 @@ class TimetableOrchestrationEngine:
                     "divisions": len(division_rows),
                     "subjects": len(subject_rows),
                     "rooms": len(room_rows),
+                    "batches": len(batch_rows),
                     "working_days": len(day_rows),
                     "usable_slots": len(slot_rows),
                 },
@@ -174,36 +435,123 @@ class TimetableOrchestrationEngine:
         )
 
         # 2) Curriculum planner + faculty load manager + student division planner
-        faculty_by_name = {
-            _normalize_text(row.get("faculty_name")): row
-            for row in faculty_rows
-            if row.get("faculty_name")
-        }
-        division_by_key = {
-            (_normalize_division_name(row.get("division_name")), _normalize_text(row.get("year"))): row
-            for row in division_rows
-        }
-        subject_by_key = {
-            (_normalize_text(row.get("subject_name")), _normalize_text(row.get("year"))): row
-            for row in subject_rows
-        }
+        pass1_llm = self._invoke_llm_hook(
+            "PASS1",
+            {
+                "load_rows": len(load_rows),
+                "faculty_rows": len(faculty_rows),
+                "note": "DR lock planning hook",
+            },
+            llm_hooks_enabled,
+        )
+        pass_trace.append(
+            {
+                "pass": "PASS1",
+                "solver": "deterministic",
+                "llm": pass1_llm,
+                "gate": {"pass": "PASS1", "passed": True, "errors": []},
+            }
+        )
+
+        faculty_by_name = {}
+        for row in faculty_rows:
+            name = row.get("faculty_name")
+            if not name:
+                continue
+            normalized = _normalize_text(name)
+            compact = _compact_token(name)
+            alpha_compact = re.sub(r"[^a-z]", "", normalized)
+            faculty_by_name.setdefault(normalized, row)
+            if compact:
+                faculty_by_name.setdefault(compact, row)
+            if alpha_compact:
+                faculty_by_name.setdefault(alpha_compact, row)
+
+            # Add searchable tokens so short forms like PPD map to names like Mrs. PPD.
+            for token in re.findall(r"[A-Za-z]{2,}", str(name)):
+                faculty_by_name.setdefault(token.casefold(), row)
+
+        division_by_key: dict[tuple[str, str], dict] = {}
+        division_by_normalized: dict[str, dict] = {}
+        for row in division_rows:
+            normalized_div = _division_base_name(row.get("division_name"))
+            normalized_div_text = _normalize_text(normalized_div)
+            compact_div = _compact_token(normalized_div)
+            year_level = _division_level_from_name(row.get("division_name")) or _normalize_year_level(row.get("year"))
+            if normalized_div_text:
+                division_by_normalized.setdefault(normalized_div_text, row)
+            if compact_div:
+                division_by_normalized.setdefault(compact_div, row)
+            if year_level and normalized_div_text:
+                division_by_key.setdefault((year_level, normalized_div_text), row)
+            if year_level and compact_div:
+                division_by_key.setdefault((year_level, compact_div), row)
+
+        subject_by_code: dict[tuple[str, str], dict] = {}
+        subject_by_name: dict[tuple[str, str], dict] = {}
+        subject_by_code_fallback: dict[str, dict] = {}
+        subject_by_name_fallback: dict[str, dict] = {}
+        for row in subject_rows:
+            subject_id = str(row.get("subject_id") or "").strip().casefold()
+            subject_name = _normalize_text(row.get("subject_name"))
+            subject_year = _normalize_year_level(row.get("year"))
+            if subject_id:
+                subject_by_code_fallback.setdefault(subject_id, row)
+                if subject_year:
+                    subject_by_code.setdefault((subject_year, subject_id), row)
+            if subject_name:
+                subject_by_name_fallback.setdefault(subject_name, row)
+                if subject_year:
+                    subject_by_name.setdefault((subject_year, subject_name), row)
+        batches_by_division: dict[str, list[str]] = {}
+        batch_code_to_id: dict[tuple[str, str], str] = {}
+        for row in batch_rows:
+            division_id = row.get("division_id")
+            batch_id = row.get("batch_id")
+            if not division_id or not batch_id:
+                continue
+            batches_by_division.setdefault(str(division_id), []).append(str(batch_id))
+            batch_code = str(row.get("batch_code") or "").strip().upper()
+            if batch_code:
+                batch_code_to_id[(str(division_id), batch_code)] = str(batch_id)
 
         tasks: list[_SessionTask] = []
         unresolved_rows = 0
+        lab_parallel_groups = 0
 
         for row in load_rows:
-            faculty_row = faculty_by_name.get(_normalize_text(row.get("faculty_name")))
-            division_row = division_by_key.get(
-                (
-                    _normalize_division_name(row.get("division")),
-                    _normalize_text(row.get("year")),
-                )
+            raw_faculty = row.get("faculty_name")
+            faculty_key = _normalize_text(raw_faculty)
+            faculty_compact = _compact_token(raw_faculty)
+            faculty_alpha = re.sub(r"[^a-z]", "", faculty_key)
+            faculty_row = faculty_by_name.get(faculty_key) or faculty_by_name.get(faculty_compact) or faculty_by_name.get(faculty_alpha)
+
+            if not faculty_row and faculty_alpha:
+                for candidate in faculty_rows:
+                    candidate_name = _normalize_text(candidate.get("faculty_name"))
+                    candidate_alpha = re.sub(r"[^a-z]", "", candidate_name)
+                    if faculty_alpha and faculty_alpha in candidate_alpha:
+                        faculty_row = candidate
+                        break
+
+            load_year = _normalize_year_level(row.get("year"))
+            division_name_key = _division_base_name(row.get("division"))
+            division_name_norm = _normalize_text(division_name_key)
+            division_name_compact = _compact_token(division_name_key)
+            division_row = (
+                division_by_key.get((load_year, division_name_norm))
+                or division_by_key.get((load_year, division_name_compact))
+                or division_by_normalized.get(division_name_norm)
+                or division_by_normalized.get(division_name_compact)
             )
-            subject_row = subject_by_key.get(
-                (
-                    _normalize_text(row.get("subject")),
-                    _normalize_text(row.get("year")),
-                )
+
+            subject_code = _subject_code_from_load(row.get("subject"))
+            subject_name_key = _normalize_text(row.get("subject"))
+            subject_row = (
+                subject_by_code.get((load_year, subject_code))
+                or subject_by_name.get((load_year, subject_name_key))
+                or subject_by_code_fallback.get(subject_code)
+                or subject_by_name_fallback.get(subject_name_key)
             )
 
             if not faculty_row or not division_row or not subject_row:
@@ -220,35 +568,114 @@ class TimetableOrchestrationEngine:
                         division_id=division_row["division_id"],
                         faculty_id=faculty_row["faculty_id"],
                         subject_id=subject_row["subject_id"],
+                        year_level=load_year,
                         batch_id=None,
                         session_type="THEORY",
                     )
                 )
-            for _ in range(lab_count):
-                tasks.append(
-                    _SessionTask(
-                        division_id=division_row["division_id"],
-                        faculty_id=faculty_row["faculty_id"],
-                        subject_id=subject_row["subject_id"],
-                        batch_id=None,
-                        session_type="LAB",
-                    )
-                )
-            for _ in range(tutorial_count):
-                tasks.append(
-                    _SessionTask(
-                        division_id=division_row["division_id"],
-                        faculty_id=faculty_row["faculty_id"],
-                        subject_id=subject_row["subject_id"],
-                        batch_id=None,
-                        session_type="TUTORIAL",
-                    )
-                )
+            if lab_count > 0:
+                division_id = str(division_row["division_id"])
+                division_batches = batches_by_division.get(division_id, [])
+                requested_batch_code = str(row.get("batch") or "").strip().upper()
+                requested_batch_id = batch_code_to_id.get((division_id, requested_batch_code)) if requested_batch_code else None
+                target_batches = [requested_batch_id] if requested_batch_id else (division_batches or [None])
+
+                # Labs are always 2-hour contiguous blocks.
+                lab_block_count = max((lab_count + 1) // 2, 1)
+                for block_index in range(lab_block_count):
+                    for batch_id in target_batches:
+                        tasks.append(
+                            _SessionTask(
+                                division_id=division_id,
+                                faculty_id=faculty_row["faculty_id"],
+                                subject_id=subject_row["subject_id"],
+                                year_level=load_year,
+                                batch_id=batch_id,
+                                session_type="LAB",
+                                duration_slots=2,
+                                group_id=f"{division_id}:{subject_row['subject_id']}:{faculty_row['faculty_id']}:{batch_id or 'ALL'}:LAB:{block_index}",
+                            )
+                        )
+                    lab_parallel_groups += 1
+
+            if tutorial_count > 0:
+                division_id = str(division_row["division_id"])
+                division_batches = batches_by_division.get(division_id, [])
+                requested_batch_code = str(row.get("batch") or "").strip().upper()
+                requested_batch_id = batch_code_to_id.get((division_id, requested_batch_code)) if requested_batch_code else None
+                target_batches = [requested_batch_id] if requested_batch_id else (division_batches or [None])
+
+                for tutorial_index in range(tutorial_count):
+                    for batch_id in target_batches:
+                        tasks.append(
+                            _SessionTask(
+                                division_id=division_row["division_id"],
+                                faculty_id=faculty_row["faculty_id"],
+                                subject_id=subject_row["subject_id"],
+                                year_level=load_year,
+                                batch_id=batch_id,
+                                session_type="TUTORIAL",
+                                duration_slots=1,
+                                group_id=f"{division_id}:{subject_row['subject_id']}:{faculty_row['faculty_id']}:{batch_id or 'ALL'}:TUTORIAL:{tutorial_index}",
+                            )
+                        )
 
         if not tasks:
             raise ValueError(
                 "No schedulable tasks generated. Ensure faculty/division/subject names in load distribution match master data."
             )
+
+        shift_windows: list[tuple[str, tuple[int, int]]] = [
+            ("SHIFT_08_12", (8 * 60, 12 * 60)),
+            ("SHIFT_10_14", (10 * 60, 14 * 60)),
+            ("SHIFT_14_18", (14 * 60, 18 * 60)),
+        ]
+        ordered_division_ids = [
+            str(row.get("division_id"))
+            for row in sorted(
+                division_rows,
+                key=lambda row: (
+                    {"FY": 0, "SY": 1, "TY": 2, "LY": 3}.get(_normalize_year_level(row.get("year")), 4),
+                    _normalize_text(row.get("division_name")),
+                    str(row.get("division_id") or ""),
+                ),
+            )
+            if row.get("division_id")
+        ]
+        division_shift_assignments: dict[str, tuple[str, tuple[int, int]]] = {}
+        for index, division_id in enumerate(ordered_division_ids):
+            division_shift_assignments[division_id] = shift_windows[index % len(shift_windows)]
+
+        # PASS 2/3/4 planning hooks
+        planning_profile = "TY_FIRST"
+        planning_signals: list[str] = []
+        for pass_name in ("PASS2", "PASS3", "PASS4"):
+            llm_trace = self._invoke_llm_hook(
+                pass_name,
+                {
+                    "session_tasks": len(tasks),
+                    "lab_parallel_groups": lab_parallel_groups,
+                    "note": "Pre-allocation guidance hook",
+                },
+                llm_hooks_enabled,
+            )
+            pass_trace.append(
+                {
+                    "pass": pass_name,
+                    "solver": "deterministic",
+                    "llm": llm_trace,
+                    "gate": {"pass": pass_name, "passed": True, "errors": []},
+                }
+            )
+            if llm_trace.get("llm_status") == "ok" and llm_trace.get("llm_content"):
+                planning_signals.append(str(llm_trace.get("llm_content")))
+
+        if planning_signals:
+            planning_profile = self._planning_profile_from_llm(planning_signals[-1])
+            if planning_profile == "BALANCED":
+                # BALANCED ordering can strand a few sessions under tight constraints.
+                # Keep LLM hooks active but use a stable deterministic ordering profile.
+                planning_profile = "TY_FIRST"
 
         yield emit_stage(
             {
@@ -256,6 +683,7 @@ class TimetableOrchestrationEngine:
                 "status": "completed",
                 "metrics": {
                     "session_tasks": len(tasks),
+                    "lab_parallel_groups": lab_parallel_groups,
                     "unresolved_load_rows": unresolved_rows,
                 },
                 "message": "Session-level scheduling tasks generated.",
@@ -270,82 +698,471 @@ class TimetableOrchestrationEngine:
         if not lab_rooms:
             lab_rooms = room_rows
 
-        used_division_slot: set[tuple[str, int, str]] = set()
+        # Division occupancy is tracked separately for full-division sessions and per-batch sessions.
+        # This allows parallel labs for different batches while still preventing invalid overlaps.
+        used_division_full_slot: set[tuple[str, int, str]] = set()
+        used_division_any_batch_slot: set[tuple[str, int, str]] = set()
+        used_division_batch_slot: set[tuple[str, str, int, str]] = set()
+        division_slot_lab_subjects: dict[tuple[str, int, str], set[str]] = {}
         used_faculty_slot: set[tuple[str, int, str]] = set()
         used_room_slot: set[tuple[str, int, str]] = set()
+        division_day_slots: dict[tuple[str, int], set[str]] = {}
+        division_day_slot_orders: dict[tuple[str, int], set[int]] = {}
+        # Track theory + lab hours per division per day (8-hour max constraint)
+        division_day_theory_lab_hours: dict[tuple[str, int], int] = {}
+        # Track theory + lab hours per faculty per day (8-hour max constraint)
+        faculty_day_theory_lab_hours: dict[tuple[str, int], int] = {}
         faculty_load_counter: dict[str, int] = {}
+        room_usage_counter: dict[str, int] = {}
         faculty_limit: dict[str, int] = {
             row["faculty_id"]: int(row.get("max_load_per_week") or 0) if row.get("max_load_per_week") else 999
+            for row in faculty_rows
+            if row.get("faculty_id")
+        }
+        faculty_windows: dict[str, tuple[int | None, int | None]] = {
+            str(row["faculty_id"]): (
+                _parse_time_to_minutes(row.get("preferred_start_time")),
+                _parse_time_to_minutes(row.get("preferred_end_time")),
+            )
             for row in faculty_rows
             if row.get("faculty_id")
         }
 
         allocated_entries: list[dict] = []
         unresolved_tasks = 0
-        detected_conflicts = 0
+        candidate_rejections = 0
+        unresolved_task_samples: list[dict[str, Any]] = []
+        hour_limit_usage: dict[int, int] = {8: 0, 9: 0, 10: 0}
 
-        sorted_tasks = sorted(
-            tasks,
-            key=lambda task: (task.session_type != "LAB", task.division_id, task.faculty_id),
+        def year_rank(value: str) -> int:
+            return {"TY": 0, "SY": 1, "FY": 2, "LY": 3}.get(value, 4)
+
+        def shift_rank(shift_name: str) -> int:
+            return {"SHIFT_08_12": 0, "SHIFT_10_14": 1, "SHIFT_14_18": 2}.get(shift_name, 3)
+
+        def candidate_start_priority(candidate_slots: list[dict], preferred_window: tuple[int, int] | None) -> tuple[int, int, int]:
+            if not candidate_slots:
+                return (1, 9999, 9999)
+            slot_order = int(candidate_slots[0].get("slot_order") or 0)
+            if not preferred_window:
+                return (1, 9999, slot_order)
+
+            slot_start = _parse_time_to_minutes(candidate_slots[0].get("start_time")) or 0
+            slot_end = _parse_time_to_minutes(candidate_slots[-1].get("end_time")) or 0
+            preferred_start, preferred_end = preferred_window
+            fits_preferred = int(slot_start >= preferred_start and slot_end <= preferred_end)
+            distance = abs(slot_start - preferred_start)
+            return (1 - fits_preferred, distance, slot_order)
+
+        def task_priority(task: _SessionTask) -> tuple:
+            shift_name, division_window = division_shift_assignments.get(task.division_id, ("SHIFT_08_12", (8 * 60, 12 * 60)))
+            if planning_profile == "FY_FIRST":
+                year_priority = {"FY": 0, "SY": 1, "TY": 2, "LY": 3}.get(task.year_level, 4)
+            else:
+                year_priority = year_rank(task.year_level)
+
+            if planning_profile == "LAB_FIRST":
+                session_priority = 0 if task.session_type == "LAB" else 1 if task.session_type == "TUTORIAL" else 2
+            elif planning_profile == "BALANCED":
+                session_priority = 0 if task.session_type == "TUTORIAL" else 1 if task.session_type == "LAB" else 2
+            else:
+                session_priority = 0 if task.session_type == "LAB" else 1 if task.session_type == "TUTORIAL" else 2
+
+            return (
+                shift_rank(shift_name),
+                session_priority,
+                year_priority,
+                task.division_id,
+                task.subject_id,
+                task.faculty_id,
+                task.batch_id or "",
+            )
+
+        tasks_ordered = sorted(tasks, key=task_priority)
+
+        slot_rows_ordered = sorted(slot_rows, key=lambda slot: int(slot.get("slot_order") or 0))
+        slot_order_by_id = {str(slot.get("slot_id")): int(slot.get("slot_order") or 0) for slot in slot_rows_ordered}
+        lunch_slot_order = next(
+            (
+                int(slot.get("slot_order") or 0)
+                for slot in slot_rows_ordered
+                if str(slot.get("start_time") or "")[:5] == "12:00"
+                and str(slot.get("end_time") or "")[:5] == "13:00"
+            ),
+            None,
         )
 
-        for task in sorted_tasks:
-            room_candidates = lab_rooms if task.session_type == "LAB" else theory_rooms
+        def select_rooms_for_block(room_candidates: list[dict], day_id: int, slot_ids: list[str], room_count: int) -> list[str]:
+            available = [
+                room
+                for room in room_candidates
+                if all((str(room["room_id"]), day_id, slot_id) not in used_room_slot for slot_id in slot_ids)
+            ]
+            if not available:
+                return []
+            available.sort(
+                key=lambda room: (
+                    room_usage_counter.get(str(room["room_id"]), 0),
+                    str(room.get("room_number") or room["room_id"]),
+                )
+            )
+            return [str(room["room_id"]) for room in available[:room_count]]
+
+        # Daily capacity tuned to support full load coverage under no-gap + conditional lunch rules.
+        max_sessions_per_day = 12
+
+        for task in tasks_ordered:
             scheduled = False
+            room_candidates = lab_rooms if task.session_type == "LAB" else theory_rooms
+            preferred_shift_window = division_shift_assignments.get(task.division_id, ("SHIFT_08_12", (8 * 60, 12 * 60)))[1]
 
-            if faculty_load_counter.get(task.faculty_id, 0) >= faculty_limit.get(task.faculty_id, 999):
-                unresolved_tasks += 1
-                detected_conflicts += 1
-                continue
+            task_duration = max(task.duration_slots, 1)
+            group_size = 1
+            for current_hour_limit in (8, 9, 10):
+                for day in day_rows:
+                    day_id = int(day["day_id"])
+                    candidate_start_indices = sorted(
+                        range(len(slot_rows_ordered)),
+                        key=lambda start_index: candidate_start_priority(
+                            slot_rows_ordered[start_index : start_index + task_duration],
+                            preferred_shift_window,
+                        ),
+                    )
 
-            for day in day_rows:
-                day_id = int(day["day_id"])
-                for slot in slot_rows:
-                    slot_id = str(slot["slot_id"])
-                    div_key = (task.division_id, day_id, slot_id)
-                    fac_key = (task.faculty_id, day_id, slot_id)
-
-                    if div_key in used_division_slot or fac_key in used_faculty_slot:
-                        detected_conflicts += 1
-                        continue
-
-                    selected_room_id: str | None = None
-                    for room in room_candidates:
-                        room_id = str(room["room_id"])
-                        room_key = (room_id, day_id, slot_id)
-                        if room_key in used_room_slot:
+                    for start_index in candidate_start_indices:
+                        candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
+                        if len(candidate_slots) != task_duration:
                             continue
-                        selected_room_id = room_id
+
+                        # Multi-hour sessions require contiguous slots.
+                        if any(
+                            int(candidate_slots[i + 1].get("slot_order") or 0) - int(candidate_slots[i].get("slot_order") or 0) != 1
+                            for i in range(len(candidate_slots) - 1)
+                        ):
+                            continue
+
+                        slot_ids = [str(item["slot_id"]) for item in candidate_slots]
+                        full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
+                        batch_div_keys = [
+                            (task.division_id, str(task.batch_id), day_id, slot_id)
+                            for slot_id in slot_ids
+                        ]
+                        fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
+                        day_key = (task.division_id, day_id)
+                        occupied = division_day_slots.setdefault(day_key, set())
+                        occupied_orders = division_day_slot_orders.setdefault(day_key, set())
+
+                        if task.batch_id:
+                            # Batch-scoped sessions can overlap with other batches, but not with
+                            # full-division sessions or the same batch at the same slot.
+                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
+                                candidate_rejections += 1
+                                continue
+                            if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
+                                candidate_rejections += 1
+                                continue
+
+                            # Encourage practical lab rotation: avoid assigning the same lab subject
+                            # to multiple batches of the same division at the same time.
+                            if task.session_type == "LAB":
+                                duplicate_lab_subject = False
+                                for slot_id in slot_ids:
+                                    key = (task.division_id, day_id, slot_id)
+                                    subject_set = division_slot_lab_subjects.get(key, set())
+                                    if task.subject_id in subject_set:
+                                        duplicate_lab_subject = True
+                                        break
+                                if duplicate_lab_subject:
+                                    candidate_rejections += 1
+                                    continue
+                        else:
+                            # Full-division sessions cannot overlap with any existing full-division
+                            # session or any batch session in that slot.
+                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
+                                candidate_rejections += 1
+                                continue
+                            if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
+                                candidate_rejections += 1
+                                continue
+
+                        new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
+                        if len(occupied) + new_slot_count > max_sessions_per_day:
+                            candidate_rejections += 1
+                            continue
+
+                        candidate_orders = {slot_order_by_id.get(slot_id, 0) for slot_id in slot_ids}
+                        proposed_orders = set(occupied_orders)
+                        proposed_orders.update(candidate_orders)
+                        if not _is_gapless_day_pattern(proposed_orders, lunch_slot_order):
+                            candidate_rejections += 1
+                            continue
+
+                        if any(fac_key in used_faculty_slot for fac_key in fac_keys):
+                            candidate_rejections += 1
+                            continue
+
+                        # Prefer 8-hour day load, then fallback to 9/10 only when needed.
+                        session_is_theory_or_lab = task.session_type in ("THEORY", "LAB")
+                        if session_is_theory_or_lab:
+                            div_day_key = (task.division_id, day_id)
+                            current_div_hours = division_day_theory_lab_hours.get(div_day_key, 0)
+                            if current_div_hours + task_duration > current_hour_limit:
+                                candidate_rejections += 1
+                                continue
+
+                            fac_day_key = (task.faculty_id, day_id)
+                            current_fac_hours = faculty_day_theory_lab_hours.get(fac_day_key, 0)
+                            if current_fac_hours + task_duration > current_hour_limit:
+                                candidate_rejections += 1
+                                continue
+
+                        selected_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, group_size)
+                        if len(selected_room_ids) < group_size:
+                            candidate_rejections += 1
+                            continue
+
+                        selected_room_id = selected_room_ids[0]
+                        for slot_id in slot_ids:
+                            allocated_entries.append(
+                                {
+                                    "division_id": task.division_id,
+                                    "faculty_id": task.faculty_id,
+                                    "subject_id": task.subject_id,
+                                    "room_id": selected_room_id,
+                                    "day_id": day_id,
+                                    "slot_id": slot_id,
+                                    "batch_id": task.batch_id,
+                                    "session_type": task.session_type,
+                                }
+                            )
+                            used_room_slot.add((selected_room_id, day_id, slot_id))
+                            if task.batch_id:
+                                used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
+                                used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
+                                if task.session_type == "LAB":
+                                    key = (task.division_id, day_id, slot_id)
+                                    division_slot_lab_subjects.setdefault(key, set()).add(task.subject_id)
+                            else:
+                                used_division_full_slot.add((task.division_id, day_id, slot_id))
+                            used_faculty_slot.add((task.faculty_id, day_id, slot_id))
+                            occupied.add(slot_id)
+                            occupied_orders.add(slot_order_by_id.get(slot_id, 0))
+                        room_usage_counter[selected_room_id] = room_usage_counter.get(selected_room_id, 0) + task_duration
+                        faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + task_duration
+
+                        if task.session_type in ("THEORY", "LAB"):
+                            div_day_key = (task.division_id, day_id)
+                            division_day_theory_lab_hours[div_day_key] = division_day_theory_lab_hours.get(div_day_key, 0) + task_duration
+
+                            fac_day_key = (task.faculty_id, day_id)
+                            faculty_day_theory_lab_hours[fac_day_key] = faculty_day_theory_lab_hours.get(fac_day_key, 0) + task_duration
+                            hour_limit_usage[current_hour_limit] += 1
+
+                        scheduled = True
                         break
 
-                    if not selected_room_id:
-                        detected_conflicts += 1
-                        continue
-
-                    allocated_entries.append(
-                        {
-                            "division_id": task.division_id,
-                            "faculty_id": task.faculty_id,
-                            "subject_id": task.subject_id,
-                            "room_id": selected_room_id,
-                            "day_id": day_id,
-                            "slot_id": slot_id,
-                            "batch_id": task.batch_id,
-                            "session_type": task.session_type,
-                        }
-                    )
-                    used_division_slot.add(div_key)
-                    used_faculty_slot.add(fac_key)
-                    used_room_slot.add((selected_room_id, day_id, slot_id))
-                    faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + 1
-                    scheduled = True
-                    break
+                    if scheduled:
+                        break
 
                 if scheduled:
                     break
 
             if not scheduled:
+                # Last-resort fallback: relax only gapless-day pattern for this task
+                # while preserving room/faculty/division conflict checks and 10-hour hard cap.
+                room_candidates = lab_rooms if task.session_type == "LAB" else theory_rooms
+                for day in day_rows:
+                    day_id = int(day["day_id"])
+                    candidate_start_indices = sorted(
+                        range(len(slot_rows_ordered)),
+                        key=lambda start_index: candidate_start_priority(
+                            slot_rows_ordered[start_index : start_index + task_duration],
+                            preferred_shift_window,
+                        ),
+                    )
+
+                    for start_index in candidate_start_indices:
+                        candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
+                        if len(candidate_slots) != task_duration:
+                            continue
+
+                        if any(
+                            int(candidate_slots[i + 1].get("slot_order") or 0) - int(candidate_slots[i].get("slot_order") or 0) != 1
+                            for i in range(len(candidate_slots) - 1)
+                        ):
+                            continue
+
+                        slot_ids = [str(item["slot_id"]) for item in candidate_slots]
+                        full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
+                        batch_div_keys = [
+                            (task.division_id, str(task.batch_id), day_id, slot_id)
+                            for slot_id in slot_ids
+                        ]
+                        fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
+                        day_key = (task.division_id, day_id)
+                        occupied = division_day_slots.setdefault(day_key, set())
+                        occupied_orders = division_day_slot_orders.setdefault(day_key, set())
+
+                        if task.batch_id:
+                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
+                                continue
+                            if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
+                                continue
+                        else:
+                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
+                                continue
+                            if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
+                                continue
+
+                        new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
+                        if len(occupied) + new_slot_count > max_sessions_per_day:
+                            continue
+
+                        if any(fac_key in used_faculty_slot for fac_key in fac_keys):
+                            continue
+
+                        if task.session_type in ("THEORY", "LAB"):
+                            hard_limit = 10
+                            div_day_key = (task.division_id, day_id)
+                            current_div_hours = division_day_theory_lab_hours.get(div_day_key, 0)
+                            if current_div_hours + task_duration > hard_limit:
+                                continue
+
+                            fac_day_key = (task.faculty_id, day_id)
+                            current_fac_hours = faculty_day_theory_lab_hours.get(fac_day_key, 0)
+                            if current_fac_hours + task_duration > hard_limit:
+                                continue
+
+                        selected_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, group_size)
+                        if len(selected_room_ids) < group_size:
+                            continue
+
+                        selected_room_id = selected_room_ids[0]
+                        for slot_id in slot_ids:
+                            allocated_entries.append(
+                                {
+                                    "division_id": task.division_id,
+                                    "faculty_id": task.faculty_id,
+                                    "subject_id": task.subject_id,
+                                    "room_id": selected_room_id,
+                                    "day_id": day_id,
+                                    "slot_id": slot_id,
+                                    "batch_id": task.batch_id,
+                                    "session_type": task.session_type,
+                                }
+                            )
+                            used_room_slot.add((selected_room_id, day_id, slot_id))
+                            if task.batch_id:
+                                used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
+                                used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
+                                if task.session_type == "LAB":
+                                    key = (task.division_id, day_id, slot_id)
+                                    division_slot_lab_subjects.setdefault(key, set()).add(task.subject_id)
+                            else:
+                                used_division_full_slot.add((task.division_id, day_id, slot_id))
+                            used_faculty_slot.add((task.faculty_id, day_id, slot_id))
+                            occupied.add(slot_id)
+                            occupied_orders.add(slot_order_by_id.get(slot_id, 0))
+
+                        room_usage_counter[selected_room_id] = room_usage_counter.get(selected_room_id, 0) + task_duration
+                        faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + task_duration
+
+                        if task.session_type in ("THEORY", "LAB"):
+                            div_day_key = (task.division_id, day_id)
+                            division_day_theory_lab_hours[div_day_key] = division_day_theory_lab_hours.get(div_day_key, 0) + task_duration
+                            fac_day_key = (task.faculty_id, day_id)
+                            faculty_day_theory_lab_hours[fac_day_key] = faculty_day_theory_lab_hours.get(fac_day_key, 0) + task_duration
+                            hour_limit_usage[10] += 1
+
+                        scheduled = True
+                        break
+
+                    if scheduled:
+                        break
+
+            if not scheduled:
                 unresolved_tasks += 1
+                if len(unresolved_task_samples) < 20:
+                    unresolved_task_samples.append(
+                        {
+                            "division_id": task.division_id,
+                            "faculty_id": task.faculty_id,
+                            "subject_id": task.subject_id,
+                            "batch_id": task.batch_id,
+                            "session_type": task.session_type,
+                            "reason": "no_feasible_slot",
+                        }
+                    )
+
+        # Measure real timetable conflicts after allocation; these should ideally be zero.
+        room_slot_counts: dict[tuple[int, str, str], int] = {}
+        faculty_slot_counts: dict[tuple[int, str, str], int] = {}
+        for row in allocated_entries:
+            room_key = (int(row["day_id"]), str(row["slot_id"]), str(row["room_id"]))
+            fac_key = (int(row["day_id"]), str(row["slot_id"]), str(row["faculty_id"]))
+            room_slot_counts[room_key] = room_slot_counts.get(room_key, 0) + 1
+            faculty_slot_counts[fac_key] = faculty_slot_counts.get(fac_key, 0) + 1
+
+        room_conflicts = sum(1 for count in room_slot_counts.values() if count > 1)
+        faculty_conflicts = sum(1 for count in faculty_slot_counts.values() if count > 1)
+        detected_conflicts = room_conflicts + faculty_conflicts
+
+        scheduled_sessions = max(len(tasks) - unresolved_tasks, 0)
+
+        # PASS 5/6/7 hooks and gates
+        for pass_name in ("PASS5", "PASS6"):
+            llm_trace = self._invoke_llm_hook(
+                pass_name,
+                {
+                    "allocated_entry_rows": len(allocated_entries),
+                    "detected_conflicts": detected_conflicts,
+                    "unresolved_sessions": unresolved_tasks,
+                },
+                llm_hooks_enabled,
+            )
+            pass_trace.append(
+                {
+                    "pass": pass_name,
+                    "solver": "deterministic",
+                    "llm": llm_trace,
+                    "gate": {"pass": pass_name, "passed": True, "errors": []},
+                }
+            )
+
+        pass7_llm = self._invoke_llm_hook(
+            "PASS7",
+            {
+                "requested_sessions": len(tasks),
+                "scheduled_sessions": scheduled_sessions,
+                "detected_conflicts": detected_conflicts,
+                "unresolved_sessions": unresolved_tasks,
+            },
+            llm_hooks_enabled,
+        )
+        pass7_gate = self._deterministic_validator_gate(
+            "PASS7",
+            {
+                "unresolved_tasks": unresolved_tasks,
+                "detected_conflicts": detected_conflicts,
+            },
+        )
+        pass_trace.append(
+            {
+                "pass": "PASS7",
+                "solver": "deterministic",
+                "llm": pass7_llm,
+                "gate": pass7_gate,
+            }
+        )
+        if strict_gate_enabled and not pass7_gate["passed"]:
+            raise ValueError(f"PASS7 validation failed: {pass7_gate['errors']}")
+
+        # Coverage guarantee: do not return or persist partial schedules.
+        if unresolved_tasks > 0:
+            raise ValueError(
+                f"Coverage requirement failed: {unresolved_tasks} sessions remain unscheduled. "
+                f"Samples: {unresolved_task_samples[:5]}"
+            )
 
         allocated_entries.sort(
             key=lambda item: (item["division_id"], item["day_id"], str(item["slot_id"]))
@@ -356,9 +1173,12 @@ class TimetableOrchestrationEngine:
                 "agent": "Resource + Constraint Handling + Schedule Optimization Agents",
                 "status": "completed",
                 "metrics": {
-                    "allocated_sessions": len(allocated_entries),
+                    "allocated_sessions": scheduled_sessions,
+                    "allocated_entry_rows": len(allocated_entries),
                     "unresolved_sessions": unresolved_tasks,
                     "detected_conflicts": detected_conflicts,
+                    "candidate_rejections": candidate_rejections,
+                    "hour_limit_usage": hour_limit_usage,
                 },
                 "message": "Conflicts handled with greedy resolution and capacity checks.",
             }
@@ -367,7 +1187,7 @@ class TimetableOrchestrationEngine:
         version_id: str | None = None
         if persist and allocated_entries:
             version_payload = {
-                "created_by": user_id,
+                "created_by": user_id or settings.anonymous_user_id,
                 "reason": reason or f"Agent orchestration run {run_id}",
                 "is_active": True,
             }
@@ -399,13 +1219,19 @@ class TimetableOrchestrationEngine:
                 "agent_manager": "CrewAI-style agent manager",
                 "llm_provider": "groq",
                 "llm_model": settings.groq_model,
+                "strict_gate_enabled": strict_gate_enabled,
+                "llm_hooks_enabled": llm_hooks_enabled,
             },
             "stages": stages,
+            "pass_trace": pass_trace,
             "final_timetable": allocated_entries,
             "summary": {
                 "requested_sessions": len(tasks),
-                "scheduled_sessions": len(allocated_entries),
+                "scheduled_sessions": scheduled_sessions,
+                "scheduled_entry_rows": len(allocated_entries),
                 "unscheduled_sessions": unresolved_tasks,
+                "detected_conflicts": detected_conflicts,
+                "unresolved_task_samples": unresolved_task_samples,
             },
         }
         yield {

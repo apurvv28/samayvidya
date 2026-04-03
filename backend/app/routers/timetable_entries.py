@@ -1,11 +1,16 @@
 """Timetable entries management routes."""
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
+from app.config import settings
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, SubjectTypeEnum
 
 router = APIRouter(prefix="/timetable-entries", tags=["timetable-entries"])
+
+
+def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
+    return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
 class TimetableEntryCreate(BaseModel):
@@ -43,7 +48,7 @@ async def list_timetable_entries(
 ) -> dict:
     """List all timetable entries (RLS enforced)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         query = supabase.table("timetable_entries").select("*")
         if version_id:
             query = query.eq("version_id", version_id)
@@ -66,7 +71,7 @@ async def get_timetable_entry(
 ) -> dict:
     """Get a specific timetable entry by ID."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("timetable_entries")
             .select("*")
@@ -117,7 +122,7 @@ async def update_timetable_entry(
 ) -> dict:
     """Update a timetable entry."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         update_data = entry.model_dump(exclude_unset=True)
         response = (
             supabase.table("timetable_entries")
@@ -143,7 +148,7 @@ async def delete_timetable_entry(
 ) -> dict:
     """Delete a timetable entry."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("timetable_entries")
             .delete()

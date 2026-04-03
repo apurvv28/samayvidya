@@ -1,11 +1,16 @@
 """Batches management routes."""
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
+from app.config import settings
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 
 router = APIRouter(prefix="/batches", tags=["batches"])
+
+
+def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
+    return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
 class BatchCreate(BaseModel):
@@ -29,7 +34,7 @@ async def list_batches(
 ) -> dict:
     """List all batches (RLS enforced)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = supabase.table("batches").select("*").execute()
         return {"data": response.data, "message": "Batches retrieved successfully"}
     except Exception as e:
@@ -46,7 +51,7 @@ async def get_batch(
 ) -> dict:
     """Get a specific batch by ID."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("batches")
             .select("*")

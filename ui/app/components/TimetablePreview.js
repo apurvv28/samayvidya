@@ -11,11 +11,11 @@ const subjectsPool = [
 ];
 
 const initialGrid = [
-  ['Mon', 'ML', 'CS', 'Break', 'CN', 'OS'],
-  ['Tue', 'AI', 'DBMS', 'Break', 'DS', 'SE'],
-  ['Wed', 'Web', 'Cloud', 'Break', 'IoT', 'Math'],
-  ['Thu', 'OS', 'CN', 'Break', 'ML', 'AI'],
-  ['Fri', 'SE', 'DS', 'Break', 'DBMS', 'Web']
+  ['Mon', 'ML', 'CS', 'CN', 'OS', 'DBMS'],
+  ['Tue', 'AI', 'DBMS', 'DS', 'SE', 'Web'],
+  ['Wed', 'Web', 'Cloud', 'IoT', 'Math', 'ML'],
+  ['Thu', 'OS', 'CN', 'ML', 'AI', 'DS'],
+  ['Fri', 'SE', 'DS', 'DBMS', 'Web', 'Cloud']
 ];
 
 export default function TimetablePreview() {
@@ -63,7 +63,7 @@ export default function TimetablePreview() {
         {/* Grid */}
         <div className="p-6 grid grid-cols-6 gap-3">
           {/* Headers */}
-          {['Day', '09:00', '10:00', '11:00', '11:30', '12:30'].map((h, i) => (
+          {['Day', '09:00', '10:00', '11:00', '12:00', '01:00'].map((h, i) => (
             <div key={i} className="text-xs font-semibold text-indigo-200/60 uppercase tracking-wider text-center pb-2">
               {h}
             </div>
@@ -78,8 +78,7 @@ export default function TimetablePreview() {
                 className={`
                   relative h-12 rounded-lg flex items-center justify-center text-xs font-medium border border-white/5
                   ${colIndex === 0 ? 'bg-indigo-900/40 text-indigo-200 font-bold' : ''}
-                  ${colIndex === 3 ? 'bg-gray-800/20 text-gray-400' : ''}
-                  ${colIndex !== 0 && colIndex !== 3 ? 'bg-indigo-500/10 text-white shadow-inner' : ''}
+                  ${colIndex !== 0 ? 'bg-indigo-500/10 text-white shadow-inner' : ''}
                 `}
               >
                 <AnimatePresence mode='popLayout'>
@@ -95,8 +94,8 @@ export default function TimetablePreview() {
                   </motion.span>
                 </AnimatePresence>
                 
-                {colIndex !== 0 && colIndex !== 3 && (
-                  <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none rounded-lg" />
+                {colIndex !== 0 && (
+                  <div className="absolute inset-0 bg-linear-to-tr from-white/5 to-transparent pointer-events-none rounded-lg" />
                 )}
               </motion.div>
             ))

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
 import Semester from '../../components/Dashboard/Semester';
 import ManageFaculty from '../../components/Dashboard/ManageFaculty';
@@ -9,9 +9,69 @@ import ManageResources from '../../components/Dashboard/ManageResources';
 import AgentOrchestrator from '../../components/Dashboard/AgentOrchestrator';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
 export default function CoordinatorDashboard() {
   const [activeTab, setActiveTab] = useState('semester');
   const [latestVersionId, setLatestVersionId] = useState(null);
+
+  useEffect(() => {
+    if (activeTab !== 'timetable' || latestVersionId) {
+      return;
+    }
+
+    const fetchLatestVersion = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/timetable-versions`);
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        const versionRows = payload.data || [];
+        const latestVersion = versionRows[0];
+        if (latestVersion?.version_id) {
+          setLatestVersionId(latestVersion.version_id);
+        }
+      } catch (error) {
+        console.error('Failed to load latest timetable version:', error);
+      }
+    };
+
+    fetchLatestVersion();
+  }, [activeTab, latestVersionId]);
+
+  useEffect(() => {
+    if (activeTab !== 'timetable') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshLatestVersion = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/timetable-versions`);
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        const versionRows = payload.data || [];
+        const latestVersion = versionRows[0];
+        if (!cancelled && latestVersion?.version_id && latestVersion.version_id !== latestVersionId) {
+          setLatestVersionId(latestVersion.version_id);
+        }
+      } catch (error) {
+        console.error('Failed to refresh latest timetable version:', error);
+      }
+    };
+
+    refreshLatestVersion();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, latestVersionId]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -31,7 +91,12 @@ export default function CoordinatorDashboard() {
           />
         );
       case 'timetable':
-        return <TimetableViewer versionId={latestVersionId} />;
+        return (
+          <TimetableViewer
+            versionId={latestVersionId}
+            onVersionChange={(newVersionId) => setLatestVersionId(newVersionId)}
+          />
+        );
       default:
         return null;
     }

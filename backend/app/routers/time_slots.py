@@ -1,11 +1,16 @@
 """Time slots management routes (reference data)."""
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
+from app.config import settings
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.supabase_client import get_user_supabase
+from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 
 router = APIRouter(prefix="/time-slots", tags=["time-slots"])
+
+
+def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
+    return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
 class TimeSlotCreate(BaseModel):
@@ -32,7 +37,7 @@ async def list_time_slots(
 ) -> dict:
     """List all time slots (RLS enforced)."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = supabase.table("time_slots").select("*").execute()
         return {"data": response.data, "message": "Time slots retrieved successfully"}
     except Exception as e:
@@ -49,7 +54,7 @@ async def get_time_slot(
 ) -> dict:
     """Get a specific time slot by ID."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("time_slots")
             .select("*")
@@ -75,7 +80,7 @@ async def create_time_slot(
 ) -> dict:
     """Create a new time slot."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("time_slots").insert(slot.model_dump()).execute()
         )
@@ -98,7 +103,7 @@ async def update_time_slot(
 ) -> dict:
     """Update a time slot."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         update_data = slot.model_dump(exclude_unset=True)
         response = (
             supabase.table("time_slots")
@@ -124,7 +129,7 @@ async def delete_time_slot(
 ) -> dict:
     """Delete a time slot."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         response = (
             supabase.table("time_slots")
             .delete()
