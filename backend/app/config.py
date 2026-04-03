@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     smtp_username: str
     smtp_password: str
 
-    # Agent API Keys
-    groq_api_key: str | None = None
-    groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # Agent LLM (Amazon Bedrock)
+    bedrock_region: str = "us-east-1"
+    bedrock_model: str = "amazon.nova-pro-v1:0"
 
     class Config:
         env_file = ".env"
