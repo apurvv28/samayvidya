@@ -470,12 +470,18 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
       
       // Get the PDF blob
       const blob = await response.blob();
+      const contentDisposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition') || '';
+      const filenameMatch = contentDisposition.match(/filename\*=(?:UTF-8'')?([^;]+)|filename="?([^";]+)"?/i);
+      const responseFilename = filenameMatch
+        ? decodeURIComponent((filenameMatch[1] || filenameMatch[2] || '').replace(/^"|"$/g, ''))
+        : '';
+      const fallbackFilename = `timetable_${new Date().getTime()}.pdf`;
       
       // Create a download link and trigger download
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `timetable_${new Date().getTime()}.pdf`;
+      link.download = responseFilename || fallbackFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
