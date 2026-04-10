@@ -172,6 +172,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let completed = false;
 
       const upsertStage = (stagePayload) => {
         setResult((prev) => {
@@ -194,14 +195,14 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
         const blocks = buffer.split('\n\n');
         buffer = blocks.pop() || '';
 
-        blocks.forEach((block) => {
+        for (const block of blocks) {
           if (!block.trim()) {
-            return;
+            continue;
           }
 
           const parsed = parseSseEvent(block);
           if (!parsed?.data) {
-            return;
+            continue;
           }
 
           if (parsed.event === 'stage') {
@@ -216,7 +217,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             if (payload.stage) {
               upsertStage(payload.stage);
             }
-            return;
+            continue;
           }
 
           if (parsed.event === 'result') {
@@ -225,13 +226,19 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             if (payload?.version_id && onTimetableCreated) {
               onTimetableCreated(payload.version_id);
             }
-            return;
+            completed = true;
+            break;
           }
 
           if (parsed.event === 'error') {
             throw new Error(parsed.data?.detail || 'Orchestration stream failed.');
           }
-        });
+        }
+
+        if (completed) {
+          await reader.cancel().catch(() => {});
+          break;
+        }
       }
 
       showToast('Timetable created successfully.', 'success');

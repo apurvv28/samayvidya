@@ -13,6 +13,35 @@ def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
     return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
+def _slot_conflicts_for_entry(
+    supabase,
+    *,
+    version_id: str,
+    day_id: int,
+    slot_id: str,
+    faculty_id: str,
+    room_id: str,
+    exclude_entry_id: str | None = None,
+) -> tuple[list[dict], list[dict]]:
+    rows = (
+        supabase.table("timetable_entries")
+        .select("entry_id, division_id, faculty_id, room_id, subject_id, batch_id, session_type")
+        .eq("version_id", version_id)
+        .eq("day_id", day_id)
+        .eq("slot_id", slot_id)
+        .execute()
+        .data
+        or []
+    )
+
+    if exclude_entry_id:
+        rows = [row for row in rows if str(row.get("entry_id")) != str(exclude_entry_id)]
+
+    faculty_conflicts = [row for row in rows if str(row.get("faculty_id")) == str(faculty_id)]
+    room_conflicts = [row for row in rows if str(row.get("room_id")) == str(room_id)]
+    return faculty_conflicts, room_conflicts
+
+
 class TimetableEntryCreate(BaseModel):
     """Create timetable entry request."""
 
@@ -98,6 +127,32 @@ async def create_timetable_entry(
     """Create a new timetable entry."""
     try:
         supabase = get_user_supabase()
+        faculty_conflicts, room_conflicts = _slot_conflicts_for_entry(
+            supabase,
+            version_id=entry.version_id,
+            day_id=entry.day_id,
+            slot_id=entry.slot_id,
+            faculty_id=entry.faculty_id,
+            room_id=entry.room_id,
+        )
+        if faculty_conflicts or room_conflicts:
+            conflict_parts: list[str] = []
+            if faculty_conflicts:
+                conflict_parts.append(
+                    f"faculty already assigned in this slot ({len(faculty_conflicts)} existing entry/entries)"
+                )
+            if room_conflicts:
+                conflict_parts.append(
+                    f"room already assigned in this slot ({len(room_conflicts)} existing entry/entries)"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cannot create timetable entry due to hard conflict: "
+                    + "; ".join(conflict_parts)
+                ),
+            )
+
         response = (
             supabase.table("timetable_entries")
             .insert(entry.model_dump())
@@ -124,6 +179,49 @@ async def update_timetable_entry(
     try:
         supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         update_data = entry.model_dump(exclude_unset=True)
+
+        existing = (
+            supabase.table("timetable_entries")
+            .select("*")
+            .eq("entry_id", entry_id)
+            .single()
+            .execute()
+            .data
+        )
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timetable entry not found.",
+            )
+
+        candidate = {**existing, **update_data}
+        faculty_conflicts, room_conflicts = _slot_conflicts_for_entry(
+            supabase,
+            version_id=str(candidate.get("version_id") or ""),
+            day_id=int(candidate.get("day_id")),
+            slot_id=str(candidate.get("slot_id") or ""),
+            faculty_id=str(candidate.get("faculty_id") or ""),
+            room_id=str(candidate.get("room_id") or ""),
+            exclude_entry_id=entry_id,
+        )
+        if faculty_conflicts or room_conflicts:
+            conflict_parts: list[str] = []
+            if faculty_conflicts:
+                conflict_parts.append(
+                    f"faculty already assigned in this slot ({len(faculty_conflicts)} existing entry/entries)"
+                )
+            if room_conflicts:
+                conflict_parts.append(
+                    f"room already assigned in this slot ({len(room_conflicts)} existing entry/entries)"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cannot update timetable entry due to hard conflict: "
+                    + "; ".join(conflict_parts)
+                ),
+            )
+
         response = (
             supabase.table("timetable_entries")
             .update(update_data)
