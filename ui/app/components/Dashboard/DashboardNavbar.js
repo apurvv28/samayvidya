@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, UserPlus } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
@@ -25,8 +25,8 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
           { id: 'semester', label: 'Semester', icon: BookOpen },
           { id: 'agent', label: 'Agent', icon: BrainCircuit },
           { id: 'timetable', label: 'Timetables', icon: Calendar },
-          { id: 'add-faculty', label: 'Add Faculty/HOD', icon: UserPlus },
-          // { id: 'add-hod', label: 'Add HOD', icon: Users },
+          { id: 'add-faculty', label: 'Manage Faculty', icon: Users },
+          { id: 'manage-load', label: 'Manage Load', icon: LayoutDashboard },
           { id: 'add-division', label: 'Manage Divisions', icon: PlusCircle },
           { id: 'resources', label: 'Manage Resources', icon: Building2 },
         ];
