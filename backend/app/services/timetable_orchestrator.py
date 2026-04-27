@@ -875,7 +875,23 @@ class TimetableOrchestrationEngine:
                 ),
             )
 
-        tasks_ordered = sorted(tasks, key=task_priority)
+        # Schedule divisions strictly in master-data order (FY→SY→TY, then name, then id).
+        # Within each division, keep task_priority ordering. Earlier divisions are fully
+        # committed to shared resource sets (rooms, faculty, division slots) before any
+        # later division is considered, so every new division validates against cumulative
+        # occupancy from all prior divisions—not only tasks that happened to sort earlier.
+        tasks_by_division: dict[str, list[_SessionTask]] = {}
+        for session_task in tasks:
+            tasks_by_division.setdefault(str(session_task.division_id), []).append(session_task)
+
+        tasks_ordered: list[_SessionTask] = []
+        for division_id in ordered_division_ids:
+            div_tasks = tasks_by_division.pop(division_id, [])
+            if div_tasks:
+                tasks_ordered.extend(sorted(div_tasks, key=task_priority))
+        for division_id in sorted(tasks_by_division.keys()):
+            div_tasks = tasks_by_division[division_id]
+            tasks_ordered.extend(sorted(div_tasks, key=task_priority))
 
         slot_rows_ordered = sorted(slot_rows, key=lambda slot: int(slot.get("slot_order") or 0))
         slot_order_by_id = {str(slot.get("slot_id")): int(slot.get("slot_order") or 0) for slot in slot_rows_ordered}

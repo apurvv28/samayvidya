@@ -3,10 +3,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import LoginForm from './LoginForm';
-import SignupForm from './SignupForm';
 
 export default function AuthCard() {
-  const [isFlipped, setIsFlipped] = useState(false);
+  const [isFlipped] = useState(false);
 
   return (
     <div className="relative w-full h-[720px]" style={{ perspective: '1000px' }}>
@@ -19,21 +18,7 @@ export default function AuthCard() {
       >
         {/* Front Face - Login */}
         <div style={{ backfaceVisibility: 'hidden', position: 'absolute', width: '100%', height: '90%', marginTop: '30px' }}>
-           <LoginForm onFlip={() => setIsFlipped(true)} />
-        </div>
-
-        {/* Back Face - Signup */}
-        <div 
-            style={{ 
-                backfaceVisibility: 'hidden', 
-                position: 'absolute', 
-                width: '100%', 
-                height: '90%',
-                marginTop: '30px',
-                transform: 'rotateY(180deg)' 
-            }}
-        >
-           <SignupForm onFlip={() => setIsFlipped(false)} />
+           <LoginForm />
         </div>
       </motion.div>
     </div>

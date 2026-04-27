@@ -75,12 +75,14 @@ export default function AddDivision() {
 
     try {
         setLoading(true);
+        const token = localStorage.getItem('authToken') || '';
 
         // 1. Create Division
         const divResponse = await fetch(`${API_BASE_URL}/divisions`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify(divisionData)
         });
@@ -97,6 +99,9 @@ export default function AddDivision() {
             
             const uploadResponse = await fetch(`${API_BASE_URL}/divisions/${divisionId}/students/upload`, {
                 method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
                 body: formData
             });
             
@@ -222,7 +227,7 @@ export default function AddDivision() {
             
             <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
                 <FileText className="w-4 h-4 shrink-0 mt-0.5" />
-                <p>CSV should contain columns: Student Name, PRN Number, Email. Passwords will be set to PRN by default.</p>
+                <p>CSV should contain columns: Name/Student Name, Email, PRN/PRN Number. Student password will be set to PRN, and users will be linked to this selected division and department.</p>
             </div>
         </div>
 

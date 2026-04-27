@@ -1,14 +1,12 @@
 """Divisions management routes."""
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import get_current_user, CurrentUser, require_role
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 import csv
 import io
-import asyncio
 import math
-from typing import List
 
 router = APIRouter(prefix="/divisions", tags=["divisions"])
 
@@ -56,7 +54,7 @@ async def list_divisions(
 @router.post("", response_model=SuccessResponse)
 async def create_division(
     division: DivisionCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role("COORDINATOR", "ADMIN")),
 ) -> dict:
     """Create a new division."""
     try:
@@ -135,9 +133,9 @@ import math
 async def upload_student_csv(
     division_id: str,
     file: UploadFile = File(...),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role("COORDINATOR", "ADMIN")),
 ) -> dict:
-    """Upload and process student CSV for a division."""
+    """Upload student CSV, create auth users, and map to selected division/department."""
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV file.")
 
@@ -145,11 +143,26 @@ async def upload_student_csv(
         content = await file.read()
         decoded_content = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(decoded_content))
-        
-        # Verify Headers
-        required_headers = ['Student Name', 'PRN Number', 'Email']
-        if not all(header in csv_reader.fieldnames for header in required_headers):
-             raise HTTPException(status_code=400, detail=f"Invalid CSV headers. Required: {', '.join(required_headers)}")
+
+        if not csv_reader.fieldnames:
+            raise HTTPException(status_code=400, detail="CSV file has no headers.")
+
+        header_map = {h.strip().lower(): h for h in csv_reader.fieldnames if h}
+        def resolve_header(*aliases: str) -> str | None:
+            for alias in aliases:
+                key = alias.strip().lower()
+                if key in header_map:
+                    return header_map[key]
+            return None
+
+        name_key = resolve_header("student name", "name")
+        email_key = resolve_header("email", "student email")
+        prn_key = resolve_header("prn", "prn number", "prn_number")
+        if not name_key or not email_key or not prn_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid CSV headers. Required columns: name/student name, email, prn/prn number.",
+            )
 
         students_to_process = list(csv_reader)
         total_students = len(students_to_process)
@@ -160,9 +173,28 @@ async def upload_student_csv(
         results = {"success": 0, "failed": 0, "errors": []}
 
         # Validate Division Exists
-        div_check = supabase.table("divisions").select("division_id").eq("division_id", division_id).execute()
+        div_check = (
+            supabase.table("divisions")
+            .select("division_id, department_id")
+            .eq("division_id", division_id)
+            .single()
+            .execute()
+        )
         if not div_check.data:
             raise HTTPException(status_code=404, detail="Division not found.")
+        division_department_id = str(div_check.data.get("department_id") or "")
+        if not division_department_id:
+            raise HTTPException(status_code=400, detail="Division has no department mapping.")
+
+        if (
+            current_user.role == "COORDINATOR"
+            and current_user.department_id
+            and str(current_user.department_id) != division_department_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="You can upload students only for divisions in your department.",
+            )
 
         # --- Batch Logic ---
         # Determine number of batches
@@ -208,9 +240,9 @@ async def upload_student_csv(
         
         # Process each student
         for index, row in enumerate(students_to_process):
-            name = row.get('Student Name', '').strip()
-            prn = row.get('PRN Number', '').strip()
-            email = row.get('Email', '').strip()
+            name = row.get(name_key, '').strip()
+            prn = row.get(prn_key, '').strip()
+            email = row.get(email_key, '').strip().lower()
 
             if not all([name, prn, email]):
                 results["failed"] += 1
@@ -227,18 +259,52 @@ async def upload_student_csv(
                 batch_code = batch_codes[batch_idx]
                 batch_id = batch_map[batch_code]
 
-                # Insert into Students Table
-                # We are no longer creating Auth users for students.
-                # user_id will be NULL for students now.
-                
+                auth_response = supabase.auth.admin.create_user(
+                    {
+                        "email": email,
+                        "password": prn,
+                        "email_confirm": True,
+                        "user_metadata": {
+                            "display_name": name,
+                            "role": "STUDENT",
+                            "prn": prn,
+                            "division": division_id,
+                            "department_id": division_department_id,
+                        },
+                    }
+                )
+                if not auth_response.user:
+                    raise ValueError("Failed to create auth user")
+                user_id = str(auth_response.user.id)
+
+                profile_payload = {
+                    "user_id": user_id,
+                    "id": user_id,
+                    "email": email,
+                    "role": "STUDENT",
+                    "department_id": division_department_id,
+                    "prn": prn,
+                    "division": division_id,
+                    "is_hod": False,
+                    "is_coordinator": False,
+                }
+                # Try new schema first, then fallback for old schema.
+                try:
+                    supabase.table("user_profiles").upsert(profile_payload).execute()
+                except Exception:
+                    fallback = dict(profile_payload)
+                    fallback.pop("user_id", None)
+                    supabase.table("user_profiles").upsert(fallback).execute()
+
+                # Keep existing students table for operational data.
                 student_data = {
                     "student_name": name,
                     "prn_number": prn,
                     "email": email,
                     "division_id": division_id,
-                    "user_id": None, # No auth user
+                    "user_id": user_id,
                     "roll_number": roll_number,
-                    "batch_id": batch_id
+                    "batch_id": batch_id,
                 }
                 supabase.table("students").upsert(student_data, on_conflict="prn_number").execute()
                 results["success"] += 1
@@ -255,7 +321,10 @@ async def upload_student_csv(
 
         return {
             "data": results,
-            "message": f"Processed {len(students_to_process)} students. Created {num_batches} batches. Success: {results['success']}, Failed: {results['failed']}."
+            "message": (
+                f"Processed {len(students_to_process)} students for division {division_id}. "
+                f"Created {num_batches} batches. Users created: {results['success']}, Failed: {results['failed']}."
+            ),
         }
 
     except HTTPException:

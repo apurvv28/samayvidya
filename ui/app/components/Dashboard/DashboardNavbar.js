@@ -2,27 +2,59 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, User, Users, PlusCircle, Building2, BookOpen, BrainCircuit } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, UserPlus } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../context/AuthContext';
 
 export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { signOut } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/');
+  };
 
   // Define navigation items based on role
-  const navItems = role === 'coordinator' 
-    ? [
-        { id: 'semester', label: 'Semester', icon: BookOpen },
-        { id: 'agent', label: 'Agent', icon: BrainCircuit },
-        { id: 'timetable', label: 'Timetables', icon: Calendar },
-        { id: 'add-faculty', label: 'Manage Faculty', icon: Users },
-        { id: 'add-division', label: 'Manage Divisions', icon: PlusCircle },
-        { id: 'resources', label: 'Manage Resources', icon: Building2 },
-      ]
-    : [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'timetable', label: 'TimeTable', icon: Calendar },
-        { id: 'profile', label: 'Profile', icon: User },
-      ];
+  const getNavItems = () => {
+    switch (role) {
+      case 'coordinator':
+        return [
+          { id: 'semester', label: 'Semester', icon: BookOpen },
+          { id: 'agent', label: 'Agent', icon: BrainCircuit },
+          { id: 'timetable', label: 'Timetables', icon: Calendar },
+          { id: 'add-faculty', label: 'Add Faculty/HOD', icon: UserPlus },
+          // { id: 'add-hod', label: 'Add HOD', icon: Users },
+          { id: 'add-division', label: 'Manage Divisions', icon: PlusCircle },
+          { id: 'resources', label: 'Manage Resources', icon: Building2 },
+        ];
+      case 'hod':
+        return [
+          { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+          { id: 'timetable', label: 'Timetables', icon: Calendar },
+          { id: 'leaves', label: 'Leaves', icon: FileText },
+          { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+        ];
+      case 'faculty':
+        return [
+          { id: 'timetable', label: 'My Timetable', icon: Calendar },
+          { id: 'apply-leave', label: 'Apply Leave', icon: FilePlus },
+          { id: 'my-leaves', label: 'My Leaves', icon: FileText },
+        ];
+      case 'student':
+        return [
+          { id: 'timetable', label: 'Timetable', icon: Calendar },
+        ];
+      default:
+        return [
+          { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        ];
+    }
+  };
+
+  const navItems = getNavItems();
 
   return (
     <nav className="fixed top-0 z-50 w-full border-b border-gray-800 bg-gray-900/80 backdrop-blur-md">
@@ -60,13 +92,13 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
               
               <div className="h-6 w-px bg-gray-800 mx-2" />
               
-              <Link
-                href="/"
+              <button
+                onClick={handleLogout}
                 className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 Logout
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -114,13 +146,13 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
               ))}
               
               <div className="border-t border-gray-800 my-2 pt-2">
-                <Link
-                  href="/"
+                <button
+                  onClick={handleLogout}
                   className="w-full flex items-center gap-2 px-3 py-3 rounded-md text-base font-medium text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <LogOut className="w-5 h-5" />
                   Logout
-                </Link>
+                </button>
               </div>
             </div>
           </motion.div>

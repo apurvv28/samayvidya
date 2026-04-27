@@ -1,4 +1,8 @@
 """Timetable versions management routes."""
+from __future__ import annotations
+
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 import json
@@ -6,6 +10,7 @@ from app.config import settings
 from app.dependencies.auth import get_current_user, CurrentUser
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
+from app.services.timetable_conflict_audit import audit_timetable_conflicts, fetch_timetable_entries_for_version
 
 router = APIRouter(prefix="/timetable-versions", tags=["timetable-versions"])
 _META_MARKER = "__TT_META__:"
@@ -46,14 +51,65 @@ def _compose_reason_with_meta(base_reason: str | None, meta: dict) -> str | None
     return f"{_META_MARKER}{payload}"
 
 
+def _parse_ui_run_context(full_reason: str | None) -> dict[str, Any]:
+    """Map AgentOrchestrator `reason` payload: `UI run context: {...}` into timetable meta fields."""
+    if not full_reason:
+        return {}
+    text = str(full_reason).strip()
+    marker = "UI run context:"
+    pos = text.casefold().find(marker.casefold())
+    if pos < 0:
+        return {}
+    tail = text[pos + len(marker) :].strip()
+    if tail.startswith(":"):
+        tail = tail[1:].strip()
+    # After metadata save, reason can be `UI run context: {...}\n__TT_META__{...}` — parse only the UI JSON.
+    if _META_MARKER in tail:
+        tail = tail.split(_META_MARKER, 1)[0].strip()
+    try:
+        data = json.loads(tail)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, Any] = {
+        "academic_year": data.get("academic_year"),
+        "semester": data.get("semester"),
+        "wef_date": data.get("effective_from"),
+        "to_date": data.get("effective_to"),
+        "version_name": data.get("program"),
+    }
+    sel = data.get("selected_divisions")
+    if isinstance(sel, list):
+        out["selected_divisions"] = [str(x) for x in sel if x is not None and str(x).strip()]
+    return out
+
+
 def _hydrate_version_row(row: dict) -> dict:
     if not row:
         return row
+    full_reason = str(row.get("reason") or "")
     base_reason, meta = _split_reason_and_meta(row.get("reason"))
     hydrated = dict(row)
     hydrated["reason"] = base_reason
+    ui_ctx = _parse_ui_run_context(full_reason)
+
+    # Prefer embedded __TT_META__ JSON, then DB columns, then UI run context from agent orchestration.
     for key in _META_KEYS:
-        hydrated[key] = meta.get(key)
+        value = meta.get(key)
+        if value in (None, ""):
+            value = row.get(key)
+        if value in (None, ""):
+            value = ui_ctx.get(key)
+        hydrated[key] = value
+
+    divs = ui_ctx.get("selected_divisions")
+    if isinstance(divs, list) and divs:
+        hydrated["selected_divisions"] = divs
+    elif isinstance(meta.get("selected_divisions"), list) and meta.get("selected_divisions"):
+        hydrated["selected_divisions"] = [str(x) for x in meta["selected_divisions"] if x is not None]
+    elif isinstance(row.get("selected_divisions"), list):
+        hydrated["selected_divisions"] = row.get("selected_divisions")
     return hydrated
 
 
@@ -100,6 +156,47 @@ async def list_timetable_versions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch timetable versions: {str(e)}",
+        )
+
+
+@router.get("/{version_id}/conflict-audit", response_model=SuccessResponse)
+async def audit_timetable_version_conflicts(
+    version_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Slot-level and merged-interval room/faculty overlap check for a saved timetable version."""
+    try:
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        entries = fetch_timetable_entries_for_version(supabase, version_id)
+        slot_rows = supabase.table("time_slots").select("*").order("slot_order").execute().data or []
+        days_by_id = {str(d["day_id"]): d for d in (supabase.table("days").select("*").execute().data or [])}
+        rooms_by_id = {str(r["room_id"]): r for r in (supabase.table("rooms").select("*").execute().data or [])}
+        faculty_by_id = {str(f["faculty_id"]): f for f in (supabase.table("faculty").select("*").execute().data or [])}
+        divisions_by_id = {str(d["division_id"]): d for d in (supabase.table("divisions").select("*").execute().data or [])}
+        subjects_by_id = {str(s["subject_id"]): s for s in (supabase.table("subjects").select("*").execute().data or [])}
+        batch_code_by_id = {
+            str(b["batch_id"]): str(b.get("batch_code") or "")
+            for b in (supabase.table("batches").select("*").execute().data or [])
+            if b.get("batch_id")
+        }
+        report = audit_timetable_conflicts(
+            entries=entries,
+            slot_rows=slot_rows,
+            days_by_id=days_by_id,
+            rooms_by_id=rooms_by_id,
+            faculty_by_id=faculty_by_id,
+            divisions_by_id=divisions_by_id,
+            subjects_by_id=subjects_by_id,
+            batch_code_by_id=batch_code_by_id,
+        )
+        return {
+            "data": {"version_id": version_id, **report},
+            "message": "Timetable conflict audit completed.",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to audit timetable version: {str(e)}",
         )
 
 

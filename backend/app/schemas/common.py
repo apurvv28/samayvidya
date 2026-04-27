@@ -53,6 +53,8 @@ class UserRoleEnum(str, Enum):
 
     STUDENT = "STUDENT"
     FACULTY = "FACULTY"
+    COORDINATOR = "COORDINATOR"
+    HOD = "HOD"
     ADMIN = "ADMIN"
 
 
