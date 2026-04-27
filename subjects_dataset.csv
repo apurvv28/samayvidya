@@ -1,0 +1,34 @@
+subject_id,subject_name,sub_short_form,subject_type,credits,hours_per_week,requires_continuity,department_id,theory_hours,lab_hours,tutorial_hours,year,delivery_mode,is_theory_online,is_lab_online,is_tutorial_online
+CI2011,Fundamentals of Data Structures,FODS,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2012,Database Management Systems,DBMS,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2013,Object Oriented Programming,OOP,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2014,Digital Systems and Microprocessor,MI,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CIM001,Discrete Mathematics,-,theory,3,3,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,0,1,second year,OFFLINE,FALSE,FALSE,FALSE
+HS2002,From Campus to Corporate - 1,FCTC-1,theory,2,2,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,0,0,second year,OFFLINE,FALSE,FALSE,FALSE
+HS2001,Reasoning and Aptitude Development - 3,-,theory,1,1,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,1,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2006,Design Thinking - 1,DT-3,theory,1,1,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,1,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2007,Engineering Design and Innovation - I,-,theory,2,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2017,Advanced Data Structure and Algorithm,ADSAA,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2018,Machine Learning,ML,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2019,Data Communication and Networking,DCAN,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2020,Full Stack Development,FD,theory,3,4,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,0,second year,OFFLINE,FALSE,FALSE,FALSE
+MM0902,Industry Automation 5.0,IA,theory,3,3,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,0,1,second year,OFFLINE,FALSE,FALSE,FALSE
+HS2003,From Campus to Corporate - 2,-,theory,2,2,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,0,0,second year,OFFLINE,FALSE,FALSE,FALSE
+HS2004,Reasoning and Aptitude Development - 4,-,theory,1,1,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,1,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2021,Design Thinking - 2,DT-2,theory,1,1,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,1,second year,OFFLINE,FALSE,FALSE,FALSE
+CI2022,Engineering Design and Innovation - 2,-,theory,2,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,second year,OFFLINE,FALSE,FALSE,FALSE
+CI3001,Computer Network Technology,CNT,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3002,Design and Analysis of Algorithms,DAOA,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3003,Artificial Neural Networks,ANN,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3004,Cloud Computing,CC,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3005,Design Thinking - 5,-,theory,1,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3006,Engineering Design and Innovation - 5,-,theory,6,12,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,12,0,third year,OFFLINE,FALSE,FALSE,FALSE
+SH3001,Reasoning and Aptitude Development,-,theory,1,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,third year,OFFLINE,FALSE,FALSE,FALSE
+AC*,Audit Courses*,-,theory,0,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3007,Software Engineering,SE,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3008,Cyber Security and Blockchain,CSAB,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3009,Deep Learning,DL,theory,4,5,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,2,2,1,third year,OFFLINE,FALSE,FALSE,FALSE
+MOOC,Coursera Courses,-,theory,1,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3010,Design Thinking - 6,DT-6,theory,1,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,third year,OFFLINE,FALSE,FALSE,FALSE
+CI3011,Engineering Design and Innovation - 6,-,theory,6,12,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,12,0,third year,OFFLINE,FALSE,FALSE,FALSE
+SH3002,Reasoning and Aptitude Development,-,theory,1,0,FALSE,a0290d31-e9c0-4899-81dd-0331657ae589,0,0,0,third year,OFFLINE,FALSE,FALSE,FALSE

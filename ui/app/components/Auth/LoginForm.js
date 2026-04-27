@@ -4,15 +4,16 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { createSupabaseClient } from '../../utils/supabase';
+import { ROLE_DASHBOARD } from '../../context/AuthContext';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export default function LoginForm({ onFlip }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -24,22 +25,44 @@ export default function LoginForm({ onFlip }) {
     setLoading(true);
 
     try {
-        // Frontend auth is disabled in backend-only mode.
-        // Route by a simple email convention until server-side auth is added.
-        const email = formData.email.toLowerCase();
-        if (email.includes('student')) {
-          router.push('/dashboard/student');
-        } else if (email.includes('faculty')) {
-          router.push('/dashboard/faculty');
-        } else {
-          router.push('/dashboard/coordinator');
-        }
+      const supabase = createSupabaseClient();
 
+      // 1. Sign in with Supabase
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (authError) throw new Error(authError.message);
+
+      const accessToken = data.session.access_token;
+      localStorage.setItem('authToken', accessToken);
+
+      // 2. Fetch role from backend
+      const profileRes = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!profileRes.ok) {
+        throw new Error('Failed to load user profile. Please try again.');
+      }
+
+      const profileData = await profileRes.json();
+      const role = profileData.data?.role;
+
+      const destination = ROLE_DASHBOARD[role];
+      if (!destination) {
+        throw new Error(
+          'Your account role is not configured yet. Please contact admin to assign a valid role (STUDENT/FACULTY/HOD/COORDINATOR).'
+        );
+      }
+
+      router.push(destination);
     } catch (err) {
-        console.error(err);
-        setError(err.message || 'Login failed');
+      console.error(err);
+      setError(err.message || 'Login failed');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -100,7 +123,7 @@ export default function LoginForm({ onFlip }) {
                 whileTap={{ scale: 0.98 }}
                 disabled={loading}
                 type="submit"
-                className="w-full relative overflow-hidden bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 group/btn mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full relative overflow-hidden bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 group/btn disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                 <span className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover/btn:animate-shimmer" />
                 {loading ? (
@@ -113,17 +136,30 @@ export default function LoginForm({ onFlip }) {
                 </motion.button>
             </form>
 
-            <div className="mt-8 text-center pt-6 border-t border-white/5">
-                <p className="text-gray-500 text-sm">
-                Don't have an account?{' '}
-                <button 
-                    onClick={onFlip}
-                    className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors hover:underline underline-offset-4"
-                >
-                    Create one
-                </button>
-                </p>
-            </div>
+            {onFlip ? (
+              <>
+                <div className="mt-6 relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-800"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-gray-900 text-gray-500">or</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 text-center">
+                  <p className="text-gray-500 text-sm">
+                    Don&apos;t have an account?{' '}
+                    <button 
+                      onClick={onFlip}
+                      className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors hover:underline underline-offset-4"
+                    >
+                      Sign up
+                    </button>
+                  </p>
+                </div>
+              </>
+            ) : null}
         </div>
     </div>
   );

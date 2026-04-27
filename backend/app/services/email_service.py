@@ -3,22 +3,24 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.config import settings
 
-def send_faculty_credentials(to_email: str, name: str, password: str, faculty_id: str):
-    """
-    Send an email to the faculty member with their login credentials.
-    """
-    subject = "Welcome to Timetable Scheduler - Login Credentials"
-    
+def send_user_credentials(to_email: str, name: str, password: str, role: str, identifier: str | None = None):
+    """Send credentials email for non-student users."""
+    role_text = (role or "USER").upper()
+    identifier_line = ""
+    if identifier:
+        identifier_line = f"<li><strong>ID:</strong> {identifier}</li>"
+
+    subject = f"Welcome to Timetable Scheduler - {role_text} Login Credentials"
     html_content = f"""
     <html>
         <body>
             <h2>Welcome, {name}!</h2>
-            <p>You have been registered as a faculty member in the Timetable Scheduler system.</p>
+            <p>You have been registered as a <strong>{role_text}</strong> in the Timetable Scheduler system.</p>
             <p>Here are your login credentials:</p>
             <ul>
                 <li><strong>Username/Email:</strong> {to_email}</li>
                 <li><strong>Password:</strong> {password}</li>
-                <li><strong>Faculty ID:</strong> {faculty_id}</li>
+                {identifier_line}
             </ul>
             <p>Please login and change your password immediately.</p>
             <br>
@@ -43,3 +45,16 @@ def send_faculty_credentials(to_email: str, name: str, password: str, faculty_id
     except Exception as e:
         print(f"Failed to send email: {e}")
         return False
+
+
+def send_faculty_credentials(to_email: str, name: str, password: str, faculty_id: str):
+    """
+    Send an email to the faculty member with their login credentials.
+    """
+    return send_user_credentials(
+        to_email=to_email,
+        name=name,
+        password=password,
+        role="FACULTY",
+        identifier=faculty_id,
+    )

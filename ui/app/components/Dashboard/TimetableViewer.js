@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, RefreshCw, Eye, X, FileDown, Pencil, Save } from 'lucide-react';
 
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -55,6 +56,18 @@ function getSlotKey(slot) {
   return slot?.slot_id || `${slot?.start_time || ''}-${slot?.end_time || ''}`;
 }
 
+/** Tailwind classes for session-type pill on light timetable cards */
+function sessionTypeBadgeClass(sessionType) {
+  const t = String(sessionType || 'THEORY').toUpperCase();
+  if (t === 'LAB' || t === 'PRACTICAL') {
+    return 'bg-teal-100 text-teal-900 border-teal-300/90';
+  }
+  if (t === 'TUTORIAL') {
+    return 'bg-violet-100 text-violet-900 border-violet-300/90';
+  }
+  return 'bg-sky-100 text-sky-900 border-sky-300/90';
+}
+
 function normalizeSearchText(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -66,8 +79,9 @@ function sortByCountThenName(a, b) {
   return String(a.label || '').localeCompare(String(b.label || ''));
 }
 
-export default function TimetableViewer({ versionId, onVersionChange }) {
+export default function TimetableViewer({ versionId, onVersionChange, canManageTimetable = false, forcedDivisionId = null }) {
   const { showToast } = useToast();
+  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -102,6 +116,8 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
     to_date: '',
   });
 
+  const canEditTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
+
   const sortedDays = useMemo(() => {
     const source = days.length ? days : FALLBACK_DAYS;
     return [...source].sort((a, b) => (a.day_id || 0) - (b.day_id || 0));
@@ -111,6 +127,17 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
     const source = slots.length ? slots : FALLBACK_SLOTS;
     return [...source].sort((a, b) => (a.slot_order || 0) - (b.slot_order || 0));
   }, [slots]);
+
+  /** Division names that appear in this version's entries only (not full department / run selection). */
+  const timetableDivisionNamesLabel = useMemo(() => {
+    const ids = [...new Set((entries || []).map((e) => String(e.division_id)).filter(Boolean))];
+    if (!ids.length) {
+      return '';
+    }
+    const names = ids.map((id) => divisionNameMap.get(id) || id);
+    names.sort((a, b) => a.localeCompare(b));
+    return names.join(', ');
+  }, [entries, divisionNameMap]);
 
   const fetchTimetableData = useCallback(async (targetVersionId) => {
     if (!targetVersionId) {
@@ -163,7 +190,11 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
 
       const [entriesJson, daysJson, slotsJson, divisionsJson, facultyJson, subjectsJson, roomsJson, versionsJson, departmentsJson, batchesJson] = responses;
 
-      setEntries(entriesJson.data || []);
+      const allEntries = entriesJson.data || [];
+      const scopedEntries = forcedDivisionId
+        ? allEntries.filter((entry) => String(entry.division_id) === String(forcedDivisionId))
+        : allEntries;
+      setEntries(scopedEntries);
       setDays((daysJson.data || []).length ? (daysJson.data || []) : FALLBACK_DAYS);
       setSlots((slotsJson.data || []).length ? (slotsJson.data || []) : FALLBACK_SLOTS);
       setDivisions(divisionsJson.data || []);
@@ -184,7 +215,7 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, forcedDivisionId]);
 
   useEffect(() => {
     setEditedByEntryId({});
@@ -430,6 +461,12 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
     }
   };
 
+  const isPdfLibraryUnavailable = (message) => {
+    if (!message || typeof message !== 'string') return false;
+    const m = message.toLowerCase();
+    return m.includes('reportlab') || m.includes('pdf generation library');
+  };
+
   const printModal = async () => {
     if (!versionId) {
       showToast('Version ID not available', 'error');
@@ -446,14 +483,15 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
         params.set('entity_id', String(modalState.entityId));
       }
       const query = params.toString();
+      const authHeaders = {
+        Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`,
+      };
       // Call backend PDF generation endpoint
       const response = await fetch(
-        `${API_BASE_URL}/pdf/timetable/download/${versionId}${query ? `?${query}` : ''}`,
+        `${API_BASE_URL}/pdf/timetable/download/${encodeURIComponent(versionId)}${query ? `?${query}` : ''}`,
         {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
-          },
+          headers: authHeaders,
         }
       );
       
@@ -461,10 +499,34 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
         let message = 'Failed to generate PDF';
         try {
           const errorPayload = await response.json();
-          message = errorPayload?.detail || message;
+          const detail = errorPayload?.detail;
+          if (Array.isArray(detail)) {
+            message = detail.map((item) => item?.msg || JSON.stringify(item)).join('; ') || message;
+          } else if (detail) {
+            message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+          }
         } catch {
           // Non-JSON error body; keep default message.
         }
+
+        // ReportLab missing on server: HTML preview works without it (browser Print → Save as PDF).
+        if (isPdfLibraryUnavailable(message)) {
+          const previewUrl = `${API_BASE_URL}/pdf/timetable/preview/${encodeURIComponent(versionId)}${query ? `?${query}` : ''}`;
+          const previewResp = await fetch(previewUrl, { method: 'GET', headers: authHeaders });
+          if (!previewResp.ok) {
+            throw new Error(message);
+          }
+          const htmlBlob = await previewResp.blob();
+          const blobUrl = window.URL.createObjectURL(htmlBlob);
+          window.open(blobUrl, '_blank', 'noopener,noreferrer');
+          window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 120_000);
+          showToast(
+            'Opened a printable timetable in a new tab. Use Print → Save as PDF. For direct .pdf downloads, run the API with backend\\venv (pip install reportlab).',
+            'success',
+          );
+          return;
+        }
+
         throw new Error(message);
       }
       
@@ -591,15 +653,17 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
                 className="w-full rounded-lg border border-white/10 bg-gray-950/70 py-2 pl-9 pr-3 text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
               />
             </div>
-            <button
-              type="button"
-              disabled={regenerating || loading}
-              onClick={handleRegenerate}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Regenerate Timetable
-            </button>
+            {canEditTimetable ? (
+              <button
+                type="button"
+                disabled={regenerating || loading}
+                onClick={handleRegenerate}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                Regenerate Timetable
+              </button>
+            ) : null}
           </div>
 
           <div className="mt-4 rounded-lg overflow-hidden border border-white/10 bg-gray-950/40 p-3 space-y-3">
@@ -654,6 +718,13 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
               </label>
             </div>
 
+            {timetableDivisionNamesLabel ? (
+              <div className="rounded border border-white/10 bg-gray-950/50 p-2 text-[11px] md:text-xs text-gray-200">
+                <span className="font-semibold text-gray-400">Division(s) in this timetable: </span>
+                <span className="text-gray-100">{timetableDivisionNamesLabel}</span>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-[11px] md:text-xs font-semibold text-gray-100">
               <div className="rounded border border-white/10 p-2 text-center">Version ID : {versionMeta?.version_id || versionId}</div>
               <div className="rounded border border-white/10 p-2 text-center">Divisions : {divisionCards.length}</div>
@@ -661,17 +732,19 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
               <div className="rounded border border-white/10 p-2 text-center">Faculty : {facultyCards.length}</div>
             </div>
 
-            <div className="flex justify-end">
-              <button
-                type="button"
-                disabled={savingMetadata || loading}
-                onClick={saveMetadata}
-                className="inline-flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20 disabled:opacity-60"
-              >
-                {savingMetadata ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Metadata
-              </button>
-            </div>
+            {canEditTimetable ? (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  disabled={savingMetadata || loading}
+                  onClick={saveMetadata}
+                  className="inline-flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/20 disabled:opacity-60"
+                >
+                  {savingMetadata ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Metadata
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -690,29 +763,33 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
       </div>
 
       {modalState.open ? (
-        <div className="fixed inset-0 z-50 bg-gray-950/80 backdrop-blur-sm flex items-start justify-center p-4 md:p-8 overflow-auto">
-          <div className="w-full max-w-7xl rounded-2xl border border-white/15 bg-gray-900 shadow-2xl print-target">
-            <div className="no-print px-4 md:px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-sm md:text-base font-semibold text-gray-100">{modalTitle}</h3>
-              <div className="flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-start justify-center p-4 md:p-8 overflow-auto">
+          <div className="w-full max-w-7xl rounded-2xl border border-teal-500/25 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 shadow-2xl shadow-teal-950/20 print-target">
+            <div className="no-print px-4 md:px-6 py-4 border-b border-teal-500/20 bg-gradient-to-r from-slate-900/98 via-slate-900/90 to-blue-950/35 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm md:text-base font-semibold text-white tracking-tight">{modalTitle}</h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   disabled={loading}
                   onClick={printModal}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg border border-teal-400/50 bg-gradient-to-r from-teal-600/90 to-cyan-600/85 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-teal-950/40 hover:from-teal-500 hover:to-cyan-500 disabled:opacity-60 disabled:shadow-none transition-colors"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                   {loading ? 'Generating PDF...' : 'Download PDF'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setEditMode((prev) => !prev)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"
-                >
-                  <Pencil className="w-4 h-4" />
-                  {editMode ? 'Cancel Edit' : 'Edit Manually'}
-                </button>
-                {editMode ? (
+                {canEditTimetable ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditMode((prev) => !prev)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    {editMode ? 'Cancel Edit' : 'Edit Manually'}
+                  </button>
+                ) : null}
+                {editMode && canEditTimetable ? (
                   <button
                     type="button"
                     disabled={savingEdits}
@@ -735,13 +812,13 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
             </div>
 
             <div className="p-4 md:p-6 space-y-4">
-              <div className="overflow-auto rounded-lg border border-white/10">
+              <div className="overflow-auto rounded-xl border border-sky-500/15 bg-slate-950/30 shadow-inner">
                 <table className="w-full min-w-350 text-[11px] border-collapse">
-                  <thead className="bg-gray-800/70">
+                  <thead className="bg-gradient-to-r from-[#0B1F3A] to-[#1565C0]">
                     <tr>
-                      <th className="text-left p-2 text-gray-300 border border-white/10 w-24">Slot/Day</th>
+                      <th className="text-left p-2.5 text-white/95 border-b-2 border-teal-400 w-24 font-semibold tracking-wide">Slot / Day</th>
                       {sortedSlots.map((slot) => (
-                        <th key={getSlotKey(slot)} className="text-center p-2 text-gray-300 border border-white/10 whitespace-nowrap">
+                        <th key={getSlotKey(slot)} className="text-center p-2.5 text-white/95 border-b-2 border-teal-400 border-l border-white/10 whitespace-nowrap font-medium">
                           {getSlotLabel(slot)}
                         </th>
                       ))}
@@ -749,12 +826,12 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
                   </thead>
                   <tbody>
                     {sortedDays.map((day) => (
-                      <tr key={day.day_id} className={day.is_working_day ? '' : 'bg-gray-950/40'}>
-                        <td className="p-2 text-gray-100 border border-white/10 font-semibold whitespace-nowrap align-top">{getDayLabel(day)}</td>
+                      <tr key={day.day_id} className={day.is_working_day ? 'bg-slate-950/20' : 'bg-slate-950/55'}>
+                        <td className="p-2 text-sky-100 border border-slate-700/60 bg-sky-950/35 font-semibold whitespace-nowrap align-top">{getDayLabel(day)}</td>
                         {sortedSlots.map((slot) => {
                           const entryList = modalCellMap.get(`${day.day_id}::${getSlotKey(slot)}`) || [];
                           return (
-                            <td key={`${day.day_id}-${getSlotKey(slot)}`} className="align-top p-1 border border-white/10 text-gray-300">
+                            <td key={`${day.day_id}-${getSlotKey(slot)}`} className="align-top p-1.5 border border-slate-700/50 text-slate-200 bg-slate-900/25">
                               {entryList.length === 0 ? (
                                 <div className="min-h-14" />
                               ) : (
@@ -770,17 +847,21 @@ export default function TimetableViewer({ versionId, onVersionChange }) {
                                     return (
                                       <div
                                         key={`${merged.entry_id || `${merged.day_id}-${merged.slot_id}`}-${index}`}
-                                        className="grid grid-cols-[70px_1fr_72px_72px] border border-white/10 bg-white/95 text-[10px] text-gray-900"
+                                        className="grid grid-cols-[70px_1fr_72px_72px] rounded-md border border-sky-900/25 bg-gradient-to-br from-slate-50 via-white to-sky-50/90 text-[10px] text-gray-900 shadow-sm"
                                       >
-                                        <div className="border-r border-gray-300 p-1 font-semibold leading-tight uppercase">{shortName}</div>
-                                        <div className="border-r border-gray-300 p-1 leading-tight">
-                                          <div className="font-semibold uppercase">{identityLabel}</div>
+                                        <div className="border-r border-slate-200 p-1 font-semibold leading-tight uppercase text-sky-950">{shortName}</div>
+                                        <div className="border-r border-slate-200 p-1 leading-tight">
+                                          <div className="font-semibold uppercase text-slate-800">{identityLabel}</div>
                                           {isLabOrTutorial ? (
-                                            <div className="text-[9px] text-gray-600">Batch: {batchCode || 'Whole'}</div>
+                                            <div className="text-[9px] text-slate-600">Batch: {batchCode || 'Whole'}</div>
                                           ) : null}
                                         </div>
-                                        <div className="border-r border-gray-300 p-1 text-center leading-tight">{merged.session_type || 'THEORY'}</div>
-                                        <div className="p-1 text-center leading-tight">{roomNameMap.get(merged.room_id) || merged.room_id}</div>
+                                        <div
+                                          className={`border-r border-slate-200/80 p-1 text-center leading-tight self-stretch flex items-center justify-center rounded-sm mx-0.5 my-0.5 text-[9px] font-bold uppercase border ${sessionTypeBadgeClass(merged.session_type)}`}
+                                        >
+                                          {merged.session_type || 'THEORY'}
+                                        </div>
+                                        <div className="p-1 text-center leading-tight text-slate-700 font-medium">{roomNameMap.get(merged.room_id) || merged.room_id}</div>
                                       </div>
                                     );
                                   })}

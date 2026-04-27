@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
 import Semester from '../../components/Dashboard/Semester';
-import ManageFaculty from '../../components/Dashboard/ManageFaculty';
 import AddDivision from '../../components/Dashboard/AddDivision';
 import ManageResources from '../../components/Dashboard/ManageResources';
 import AgentOrchestrator from '../../components/Dashboard/AgentOrchestrator';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
+import UserProvisioning from '../../components/Dashboard/UserProvisioning';
+import RoleGuard from '../../components/RoleGuard';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -78,7 +79,9 @@ export default function CoordinatorDashboard() {
       case 'semester':
         return <Semester />;
       case 'add-faculty':
-        return <ManageFaculty />;
+        return <UserProvisioning mode="faculty" />;
+      case 'add-hod':
+        return <UserProvisioning mode="hod" />;
       case 'add-division':
         return <AddDivision />;
       case 'resources':
@@ -95,6 +98,7 @@ export default function CoordinatorDashboard() {
           <TimetableViewer
             versionId={latestVersionId}
             onVersionChange={(newVersionId) => setLatestVersionId(newVersionId)}
+            canManageTimetable
           />
         );
       default:
@@ -103,14 +107,16 @@ export default function CoordinatorDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white selection:bg-indigo-500/30">
-      <DashboardNavbar role="coordinator" activeTab={activeTab} setActiveTab={setActiveTab} />
-      
-      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="bg-gray-900/50 border border-white/5 rounded-2xl min-h-150 backdrop-blur-sm">
-            {renderContent()}
-        </div>
-      </main>
-    </div>
+    <RoleGuard allowedRole={['COORDINATOR', 'ADMIN']}>
+      <div className="min-h-screen bg-gray-950 text-white selection:bg-indigo-500/30">
+        <DashboardNavbar role="coordinator" activeTab={activeTab} setActiveTab={setActiveTab} />
+        
+        <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <div className="bg-gray-900/50 border border-white/5 rounded-2xl min-h-150 backdrop-blur-sm">
+              {renderContent()}
+          </div>
+        </main>
+      </div>
+    </RoleGuard>
   );
 }

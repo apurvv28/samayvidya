@@ -1,5 +1,6 @@
 """Main FastAPI application entry point."""
 import logging
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -59,6 +60,17 @@ async def startup_event():
     """Application startup event."""
     logger.info(f"Starting Timetable Scheduler API in {settings.environment} mode")
     logger.info(f"Supabase URL: {settings.supabase_url}")
+    logger.info("Python executable: %s", sys.executable)
+    try:
+        import reportlab  # noqa: F401
+
+        logger.info("reportlab: OK (PDF export enabled)")
+    except ImportError as exc:
+        logger.warning(
+            "reportlab missing for this interpreter — PDF download will fail. "
+            "Use backend/venv to run the API (see backend/run_dev.bat). Import error: %s",
+            exc,
+        )
 
 
 @app.on_event("shutdown")
