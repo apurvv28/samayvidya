@@ -125,6 +125,35 @@ async def delete_division(
         )
 
 
+@router.get("/{division_id}/students", response_model=SuccessResponse)
+async def get_division_students(
+    division_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Get all students in a division with their details."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Get students from students table with batch information
+        response = (
+            supabase.table("students")
+            .select("*, batches(batch_code)")
+            .eq("division_id", division_id)
+            .order("roll_number")
+            .execute()
+        )
+        
+        return {
+            "data": response.data or [],
+            "message": f"Retrieved {len(response.data or [])} students",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch students: {str(e)}",
+        )
+
+
 import math
 
 # ... (imports)
@@ -258,60 +287,35 @@ async def upload_student_csv(
                 batch_idx = min(index // batch_size, num_batches - 1)
                 batch_code = batch_codes[batch_idx]
                 batch_id = batch_map[batch_code]
+                
+                # Hash password (PRN) using bcrypt
+                import bcrypt
+                password_hash = bcrypt.hashpw(prn.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-                auth_response = supabase.auth.admin.create_user(
-                    {
-                        "email": email,
-                        "password": prn,
-                        "email_confirm": True,
-                        "user_metadata": {
-                            "display_name": name,
-                            "role": "STUDENT",
-                            "prn": prn,
-                            "division": division_id,
-                            "department_id": division_department_id,
-                        },
-                    }
-                )
-                if not auth_response.user:
-                    raise ValueError("Failed to create auth user")
-                user_id = str(auth_response.user.id)
-
-                profile_payload = {
-                    "user_id": user_id,
-                    "id": user_id,
-                    "email": email,
-                    "role": "STUDENT",
-                    "department_id": division_department_id,
-                    "prn": prn,
-                    "division": division_id,
-                    "is_hod": False,
-                    "is_coordinator": False,
-                }
-                # Try new schema first, then fallback for old schema.
-                try:
-                    supabase.table("user_profiles").upsert(profile_payload).execute()
-                except Exception:
-                    fallback = dict(profile_payload)
-                    fallback.pop("user_id", None)
-                    supabase.table("user_profiles").upsert(fallback).execute()
-
-                # Keep existing students table for operational data.
+                # Create student record with authentication (students table only - no user_profiles)
+                # Note: user_id is optional now since we removed the foreign key constraint
                 student_data = {
                     "student_name": name,
                     "prn_number": prn,
                     "email": email,
+                    "password_hash": password_hash,  # Add password hash for authentication
                     "division_id": division_id,
-                    "user_id": user_id,
                     "roll_number": roll_number,
                     "batch_id": batch_id,
                 }
-                supabase.table("students").upsert(student_data, on_conflict="prn_number").execute()
-                results["success"] += 1
+                
+                try:
+                    supabase.table("students").upsert(student_data, on_conflict="prn_number").execute()
+                    results["success"] += 1
+                except Exception as student_error:
+                    print(f"[STUDENT UPLOAD] Student creation error for {email}: {str(student_error)}")
+                    raise ValueError(f"Failed to create student: {str(student_error)}")
 
             except Exception as e:
                 results["failed"] += 1
-                results["errors"].append(f"Error processing {email}: {str(e)}")
+                error_msg = f"Error processing {email}: {str(e)}"
+                print(f"[STUDENT UPLOAD] {error_msg}")
+                results["errors"].append(error_msg)
 
         error_msg = ""
         if results["errors"]:

@@ -8,6 +8,7 @@ import ManageResources from '../../components/Dashboard/ManageResources';
 import AgentOrchestrator from '../../components/Dashboard/AgentOrchestrator';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
 import ManageFaculty from '../../components/Dashboard/ManageFaculty';
+import FacultyList from '../../components/Dashboard/FacultyList';
 import UserProvisioning from '../../components/Dashboard/UserProvisioning';
 import RoleGuard from '../../components/RoleGuard';
 
@@ -80,7 +81,7 @@ export default function CoordinatorDashboard() {
       case 'semester':
         return <Semester />;
       case 'add-faculty':
-        return <UserProvisioning mode="faculty" />;
+        return <FacultyList />;
       case 'add-hod':
         return <UserProvisioning mode="hod" />;
       case 'manage-load':

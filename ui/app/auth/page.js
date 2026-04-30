@@ -21,7 +21,7 @@ export default function AuthPage() {
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-500/20 blur-[100px] rounded-full pointer-events-none" />
 
-      <div className="z-10 w-full max-w-md relative">
+      <div className="z-10 w-full max-w-3xl relative">
          <AuthCard />
       </div>
     </div>

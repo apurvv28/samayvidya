@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, UserCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
@@ -36,16 +36,19 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
           { id: 'timetable', label: 'Timetables', icon: Calendar },
           { id: 'leaves', label: 'Leaves', icon: FileText },
           { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+          { id: 'profile', label: 'Profile', icon: UserCircle },
         ];
       case 'faculty':
         return [
           { id: 'timetable', label: 'My Timetable', icon: Calendar },
           { id: 'apply-leave', label: 'Apply Leave', icon: FilePlus },
           { id: 'my-leaves', label: 'My Leaves', icon: FileText },
+          { id: 'profile', label: 'Profile', icon: UserCircle },
         ];
       case 'student':
         return [
           { id: 'timetable', label: 'Timetable', icon: Calendar },
+          { id: 'notifications', label: 'Notifications', icon: FileText },
         ];
       default:
         return [

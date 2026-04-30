@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { createSupabaseClient } from '../utils/supabase';
+import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext(null);
 
@@ -25,73 +25,100 @@ export const ROUTE_ROLES = {
 };
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);       // Supabase auth user
+  const [user, setUser] = useState(null);       // Custom auth user (from JWT)
   const [profile, setProfile] = useState(null); // { role, department_id, is_hod, is_coordinator }
   const [loading, setLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
 
-  const supabase = createSupabaseClient();
-
-  const fetchProfile = useCallback(async (accessToken) => {
+  // Decode JWT token to get user info
+  const decodeToken = useCallback((token) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.data;
-    } catch {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('[AUTH] Failed to decode token:', error);
       return null;
     }
   }, []);
 
   useEffect(() => {
-    // Initial session check
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        setUser(session.user);
-        const p = await fetchProfile(session.access_token);
-        setProfile(p);
-        setProfileLoaded(true);
-        // Keep token in localStorage for legacy API calls
-        localStorage.setItem('authToken', session.access_token);
-      } else {
-        setProfileLoaded(true);
-      }
-      setLoading(false);
-    });
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session) {
-          setUser(session.user);
-          const p = await fetchProfile(session.access_token);
-          setProfile(p);
+    console.log('[AUTH] Initializing auth context...');
+    
+    // Helper to get cookie value
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return null;
+    };
+    
+    // Check for custom JWT token in localStorage or cookie
+    const token = localStorage.getItem('authToken') || getCookie('authToken');
+    
+    if (token) {
+      console.log('[AUTH] Token found');
+      const decoded = decodeToken(token);
+      
+      if (decoded) {
+        console.log('[AUTH] Token decoded:', { email: decoded.email, role: decoded.role });
+        
+        // Check if token is expired
+        if (decoded.exp && decoded.exp * 1000 > Date.now()) {
+          console.log('[AUTH] Token is valid');
+          // Token is valid
+          setUser({
+            id: decoded.sub,
+            email: decoded.email,
+          });
+          setProfile({
+            role: decoded.role,
+            department_id: decoded.department_id,
+            division_id: decoded.division_id, // For students
+            prn: decoded.prn, // For students
+            email: decoded.email,
+            is_hod: decoded.role === 'HOD',
+            is_coordinator: decoded.role === 'COORDINATOR',
+          });
           setProfileLoaded(true);
-          localStorage.setItem('authToken', session.access_token);
         } else {
-          setUser(null);
-          setProfile(null);
-          setProfileLoaded(true);
+          console.log('[AUTH] Token expired');
+          // Token expired
           localStorage.removeItem('authToken');
+          document.cookie = 'authToken=; path=/; max-age=0';
+          setProfileLoaded(true);
         }
-        setLoading(false);
+      } else {
+        console.log('[AUTH] Failed to decode token');
+        localStorage.removeItem('authToken');
+        document.cookie = 'authToken=; path=/; max-age=0';
+        setProfileLoaded(true);
       }
-    );
+    } else {
+      console.log('[AUTH] No token found');
+      setProfileLoaded(true);
+    }
+    
+    setLoading(false);
+  }, [decodeToken]);
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+  const signOut = useCallback(() => {
+    console.log('[AUTH] Signing out...');
     setUser(null);
     setProfile(null);
     localStorage.removeItem('authToken');
-  }, [supabase]);
+    // Clear cookie
+    document.cookie = 'authToken=; path=/; max-age=0';
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, profileLoaded, signOut, supabase }}>
+    <AuthContext.Provider value={{ user, profile, loading, profileLoaded, signOut }}>
       {children}
     </AuthContext.Provider>
   );

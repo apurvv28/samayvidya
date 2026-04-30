@@ -9,7 +9,7 @@ export default function AuthCard() {
   const [isFlipped, setIsFlipped] = useState(false);
 
   return (
-    <div className="relative w-full h-[720px]" style={{ perspective: '1000px' }}>
+    <div className="relative w-full max-w-2xl mx-auto h-[650px]" style={{ perspective: '1000px' }}>
       <motion.div
         className="relative w-full h-full"
         initial={false}

@@ -12,16 +12,18 @@ class DepartmentCreate(BaseModel):
     """Create department request."""
 
     department_name: str
-    academic_year: str
-    semester: int
-    start_date: str
-    end_date: str
+    department_code: str | None = None
+    academic_year: str | None = None
+    semester: int | None = None
+    start_date: str | None = None
+    end_date: str | None = None
 
 
 class DepartmentUpdate(BaseModel):
     """Update department request."""
 
     department_name: str | None = None
+    department_code: str | None = None
     academic_year: str | None = None
     semester: int | None = None
     start_date: str | None = None

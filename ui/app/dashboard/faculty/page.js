@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { BackgroundBeams } from '../../components/ui/BackgroundBeams';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
+import FacultyProfile from '../../components/Dashboard/FacultyProfile';
 import RoleGuard from '../../components/RoleGuard';
 import {
   Loader2, Calendar, FilePlus, FileText, CheckCircle2, XCircle,
@@ -26,8 +27,12 @@ export default function FacultyDashboard() {
   const [leaveForm, setLeaveForm] = useState({
     start_date: '',
     end_date: '',
+    leave_type: 'FULL_DAY',
     reason: '',
+    proof_image_url: '',
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
   const [submittingLeave, setSubmittingLeave] = useState(false);
   const [leaveSuccess, setLeaveSuccess] = useState(null);
   const [leaveError, setLeaveError] = useState(null);
@@ -124,6 +129,52 @@ export default function FacultyDashboard() {
     setLeaveForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setLeaveError('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setLeaveError('Image size must be less than 5MB');
+      return;
+    }
+
+    setImageFile(file);
+    setLeaveError(null);
+
+    try {
+      setUploadingImage(true);
+      const token = localStorage.getItem('authToken') || '';
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE_URL}/faculty-leaves/upload-proof`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to upload image');
+      }
+
+      const data = await res.json();
+      setLeaveForm(prev => ({ ...prev, proof_image_url: data.data.public_url }));
+    } catch (err) {
+      setLeaveError(err.message);
+      setImageFile(null);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
     setLeaveError(null);
@@ -136,6 +187,11 @@ export default function FacultyDashboard() {
 
     if (!leaveForm.start_date || !leaveForm.end_date || !leaveForm.reason.trim()) {
       setLeaveError('All fields are required');
+      return;
+    }
+
+    if (!leaveForm.proof_image_url) {
+      setLeaveError('Please upload proof image');
       return;
     }
 
@@ -157,7 +213,9 @@ export default function FacultyDashboard() {
           faculty_id: selectedFacultyId,
           start_date: leaveForm.start_date,
           end_date: leaveForm.end_date,
+          leave_type: leaveForm.leave_type,
           reason: leaveForm.reason,
+          proof_image_url: leaveForm.proof_image_url,
         }),
       });
 
@@ -167,11 +225,65 @@ export default function FacultyDashboard() {
       }
 
       setLeaveSuccess('Leave request submitted successfully! Awaiting HOD approval.');
-      setLeaveForm({ start_date: '', end_date: '', reason: '' });
+      setLeaveForm({ start_date: '', end_date: '', leave_type: 'FULL_DAY', reason: '', proof_image_url: '' });
+      setImageFile(null);
     } catch (err) {
       setLeaveError(err.message);
     } finally {
       setSubmittingLeave(false);
+    }
+  };
+
+  const handleRequestAdjustment = async (leaveId) => {
+    try {
+      setLeaveError(null);
+      const token = localStorage.getItem('authToken') || '';
+      
+      // First, get affected slots
+      const affectedRes = await fetch(
+        `${API_BASE_URL}/faculty-leaves/${leaveId}/affected-slots`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
+      if (!affectedRes.ok) {
+        throw new Error('Failed to fetch affected slots');
+      }
+      
+      const affectedData = await affectedRes.json();
+      const entryIds = (affectedData.data?.affected_entries || []).map(e => e.entry_id);
+      
+      if (entryIds.length === 0) {
+        setLeaveError('No timetable slots found for this leave period');
+        return;
+      }
+      
+      // Request adjustment
+      const adjustRes = await fetch(`${API_BASE_URL}/faculty-leaves/request-adjustment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          leave_id: leaveId,
+          entry_ids: entryIds,
+        }),
+      });
+      
+      if (!adjustRes.ok) {
+        const err = await adjustRes.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to request adjustment');
+      }
+      
+      const adjustData = await adjustRes.json();
+      setLeaveSuccess(
+        `Adjustment request sent! ${adjustData.data?.notified_faculty_count || 0} faculty members have been notified.`
+      );
+      
+      // Scroll to top to show success message
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      setLeavesError(err.message);
     }
   };
 
@@ -225,10 +337,21 @@ export default function FacultyDashboard() {
       case 'timetable':
         return (
           <div className="bg-gray-900/50 border border-white/5 rounded-2xl min-h-[60vh] backdrop-blur-sm">
-            <TimetableViewer
-              versionId={latestVersionId}
-              onVersionChange={(newId) => setLatestVersionId(newId)}
-            />
+            {selectedFacultyId ? (
+              <TimetableViewer
+                versionId={latestVersionId}
+                onVersionChange={(newId) => setLatestVersionId(newId)}
+                facultyFilterId={selectedFacultyId}
+                showOnlyFacultyView={true}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[60vh] text-gray-400">
+                <div className="text-center space-y-2">
+                  <Calendar className="w-12 h-12 mx-auto text-gray-600" />
+                  <p>Please select your faculty profile to view timetable</p>
+                </div>
+              </div>
+            )}
           </div>
         );
 
@@ -292,6 +415,23 @@ export default function FacultyDashboard() {
 
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Leave Type
+                  </label>
+                  <select
+                    name="leave_type"
+                    value={leaveForm.leave_type}
+                    onChange={handleLeaveChange}
+                    required
+                    className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="FULL_DAY">Full Day</option>
+                    <option value="HALF_DAY_FIRST">Half Day (First Half)</option>
+                    <option value="HALF_DAY_SECOND">Half Day (Second Half)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     Reason for Leave
                   </label>
                   <textarea
@@ -305,9 +445,36 @@ export default function FacultyDashboard() {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Proof Image <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      disabled={uploadingImage}
+                      className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-500 file:cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all disabled:opacity-50"
+                    />
+                    {uploadingImage && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                      </div>
+                    )}
+                  </div>
+                  {imageFile && leaveForm.proof_image_url && (
+                    <div className="flex items-center gap-2 text-sm text-green-400">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Image uploaded successfully
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">Upload medical certificate, appointment letter, or other proof (Max 5MB)</p>
+                </div>
+
                 <button
                   type="submit"
-                  disabled={submittingLeave || !selectedFacultyId}
+                  disabled={submittingLeave || !selectedFacultyId || uploadingImage}
                   className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingLeave ? (
@@ -388,13 +555,35 @@ export default function FacultyDashboard() {
                             </span>
                             {getStatusBadge(leave.status)}
                           </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span className="px-2 py-1 bg-gray-700/50 rounded">
+                              {leave.leave_type === 'FULL_DAY' ? 'Full Day' : 
+                               leave.leave_type === 'HALF_DAY_FIRST' ? 'Half Day (First Half)' :
+                               'Half Day (Second Half)'}
+                            </span>
+                          </div>
                           <p className="text-sm text-gray-400">{leave.reason}</p>
                           {leave.created_at && (
                             <p className="text-xs text-gray-600">
                               Submitted on {new Date(leave.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </p>
                           )}
+                          {leave.rejection_reason && leave.status === 'REJECTED' && (
+                            <div className="mt-2 p-3 bg-red-900/20 border border-red-500/20 rounded-lg">
+                              <p className="text-xs font-semibold text-red-400 mb-1">Rejection Reason:</p>
+                              <p className="text-xs text-red-300">{leave.rejection_reason}</p>
+                            </div>
+                          )}
                         </div>
+                        {leave.status === 'APPROVED' && (
+                          <button
+                            onClick={() => handleRequestAdjustment(leave.leave_id)}
+                            className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Request Adjustment
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -403,6 +592,9 @@ export default function FacultyDashboard() {
             </div>
           </div>
         );
+
+      case 'profile':
+        return <FacultyProfile />;
 
       default:
         return null;

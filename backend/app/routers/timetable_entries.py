@@ -75,12 +75,25 @@ async def list_timetable_entries(
     version_id: str | None = None,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """List all timetable entries (RLS enforced)."""
+    """List all timetable entries with related data (RLS enforced)."""
     try:
         supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
-        query = supabase.table("timetable_entries").select("*")
+        
+        # Join with related tables to get names instead of just IDs
+        query = supabase.table("timetable_entries").select(
+            "*,"
+            "subjects(subject_id, subject_name, subject_type, sub_short_form),"
+            "faculty(faculty_id, faculty_name, faculty_code),"
+            "divisions(division_id, division_name, year),"
+            "rooms(room_id, room_number, room_type),"
+            "days(day_id, day_name),"
+            "time_slots(slot_id, start_time, end_time, slot_order),"
+            "batches(batch_id, batch_code)"
+        )
+        
         if version_id:
             query = query.eq("version_id", version_id)
+        
         response = query.execute()
         return {
             "data": response.data,
@@ -98,12 +111,23 @@ async def get_timetable_entry(
     entry_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Get a specific timetable entry by ID."""
+    """Get a specific timetable entry by ID with related data."""
     try:
         supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        
+        # Join with related tables to get names
         response = (
             supabase.table("timetable_entries")
-            .select("*")
+            .select(
+                "*,"
+                "subjects(subject_id, subject_name, subject_type, sub_short_form),"
+                "faculty(faculty_id, faculty_name, faculty_code),"
+                "divisions(division_id, division_name, year),"
+                "rooms(room_id, room_number, room_type),"
+                "days(day_id, day_name),"
+                "time_slots(slot_id, start_time, end_time, slot_order),"
+                "batches(batch_id, batch_code)"
+            )
             .eq("entry_id", entry_id)
             .single()
             .execute()

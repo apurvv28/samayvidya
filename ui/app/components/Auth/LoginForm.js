@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createSupabaseClient } from '../../utils/supabase';
 import { ROLE_DASHBOARD } from '../../context/AuthContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
@@ -25,43 +24,59 @@ export default function LoginForm({ onFlip }) {
     setLoading(true);
 
     try {
-      const supabase = createSupabaseClient();
-
-      // 1. Sign in with Supabase
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
+      console.log('[LOGIN] Submitting login form...');
+      
+      // Use custom login endpoint instead of Supabase Auth
+      const loginRes = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
       });
 
-      if (authError) throw new Error(authError.message);
-
-      const accessToken = data.session.access_token;
-      localStorage.setItem('authToken', accessToken);
-
-      // 2. Fetch role from backend
-      const profileRes = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (!profileRes.ok) {
-        throw new Error('Failed to load user profile. Please try again.');
+      if (!loginRes.ok) {
+        const errorData = await loginRes.json();
+        throw new Error(errorData.detail || 'Login failed');
       }
 
-      const profileData = await profileRes.json();
-      const role = profileData.data?.role;
+      const loginData = await loginRes.json();
+      console.log('[LOGIN] Login response:', loginData);
+      
+      const accessToken = loginData.access_token;
+      const user = loginData.user;
 
+      // Store token in localStorage
+      localStorage.setItem('authToken', accessToken);
+      
+      // Also store in cookie for middleware
+      document.cookie = `authToken=${accessToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+      
+      console.log('[LOGIN] Token stored, user role:', user.role);
+
+      // Get role and redirect to appropriate dashboard
+      const role = user.role;
       const destination = ROLE_DASHBOARD[role];
+      
+      console.log('[LOGIN] Role:', role, 'Destination:', destination);
+      
       if (!destination) {
         throw new Error(
           'Your account role is not configured yet. Please contact admin to assign a valid role (STUDENT/FACULTY/HOD/COORDINATOR).'
         );
       }
 
-      router.push(destination);
+      console.log('[LOGIN] Redirecting to:', destination);
+      
+      // Force a full page reload to the destination to ensure auth context reloads
+      window.location.href = destination;
+      
     } catch (err) {
-      console.error(err);
+      console.error('[LOGIN ERROR]', err);
       setError(err.message || 'Login failed');
-    } finally {
       setLoading(false);
     }
   };

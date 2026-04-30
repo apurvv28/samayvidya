@@ -79,7 +79,7 @@ function sortByCountThenName(a, b) {
   return String(a.label || '').localeCompare(String(b.label || ''));
 }
 
-export default function TimetableViewer({ versionId, onVersionChange, canManageTimetable = false, forcedDivisionId = null }) {
+export default function TimetableViewer({ versionId, onVersionChange, canManageTimetable = false, forcedDivisionId = null, facultyFilterId = null, showOnlyFacultyView = false }) {
   const { showToast } = useToast();
   const { profile } = useAuth();
 
@@ -191,9 +191,18 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       const [entriesJson, daysJson, slotsJson, divisionsJson, facultyJson, subjectsJson, roomsJson, versionsJson, departmentsJson, batchesJson] = responses;
 
       const allEntries = entriesJson.data || [];
-      const scopedEntries = forcedDivisionId
-        ? allEntries.filter((entry) => String(entry.division_id) === String(forcedDivisionId))
-        : allEntries;
+      
+      // Filter entries based on division or faculty
+      let scopedEntries = allEntries;
+      
+      if (forcedDivisionId) {
+        // Filter by division (for student view)
+        scopedEntries = allEntries.filter((entry) => String(entry.division_id) === String(forcedDivisionId));
+      } else if (facultyFilterId && showOnlyFacultyView) {
+        // Filter by faculty - show only entries where this faculty is teaching
+        scopedEntries = allEntries.filter((entry) => String(entry.faculty_id) === String(facultyFilterId));
+      }
+      
       setEntries(scopedEntries);
       setDays((daysJson.data || []).length ? (daysJson.data || []) : FALLBACK_DAYS);
       setSlots((slotsJson.data || []).length ? (slotsJson.data || []) : FALLBACK_SLOTS);
@@ -215,7 +224,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     } finally {
       setLoading(false);
     }
-  }, [showToast, forcedDivisionId]);
+  }, [showToast, forcedDivisionId, facultyFilterId, showOnlyFacultyView]);
 
   useEffect(() => {
     setEditedByEntryId({});
@@ -296,14 +305,24 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       return [];
     }
 
+    let filtered = [];
     if (modalState.section === 'division') {
-      return entries.filter((entry) => String(entry.division_id) === String(modalState.entityId));
+      filtered = entries.filter((entry) => String(entry.division_id) === String(modalState.entityId));
+    } else if (modalState.section === 'room') {
+      filtered = entries.filter((entry) => String(entry.room_id) === String(modalState.entityId));
+    } else {
+      // Faculty section - show all entries for this faculty
+      filtered = entries.filter((entry) => String(entry.faculty_id) === String(modalState.entityId));
     }
-    if (modalState.section === 'room') {
-      return entries.filter((entry) => String(entry.room_id) === String(modalState.entityId));
+
+    // If faculty view is enabled AND viewing division/room (not their own faculty timetable),
+    // further filter to show only this faculty's slots
+    if (facultyFilterId && showOnlyFacultyView && modalState.section !== 'faculty') {
+      filtered = filtered.filter((entry) => String(entry.faculty_id) === String(facultyFilterId));
     }
-    return entries.filter((entry) => String(entry.faculty_id) === String(modalState.entityId));
-  }, [entries, modalState]);
+
+    return filtered;
+  }, [entries, modalState, facultyFilterId, showOnlyFacultyView]);
 
   const modalCellMap = useMemo(() => {
     const map = new Map();
@@ -753,6 +772,21 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
             <Loader2 className="w-5 h-5 animate-spin" />
             Loading timetable workspace...
           </div>
+        ) : showOnlyFacultyView ? (
+          // Faculty view: Show their own timetable, divisions they teach, and room assignments
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-900/10 to-blue-900/5 p-4">
+              <h3 className="text-sm font-semibold text-cyan-300 mb-2">Your Teaching Schedule</h3>
+              <p className="text-xs text-gray-400">
+                View your complete weekly timetable, divisions you teach, and room assignments.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              {renderCardList('My Weekly Timetable', 'faculty', filteredCards.faculty)}
+              {renderCardList('My Division Timetables', 'division', filteredCards.divisions)}
+              {renderCardList('My Room Assignments', 'room', filteredCards.rooms)}
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             {renderCardList('Division Timetables', 'division', filteredCards.divisions)}
@@ -838,12 +872,13 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                                 <div className="space-y-1 min-h-14">
                                   {entryList.map((entry, index) => {
                                     const merged = getMergedEntry(entry);
-                                    const shortName = subjectShortMap.get(merged.subject_id) || subjectNameMap.get(merged.subject_id) || merged.subject_id;
-                                    const batchCode = merged.batch_id ? (batchCodeMap.get(merged.batch_id) || merged.batch_id) : null;
+                                    // Try to get subject name from nested object first, then fall back to maps
+                                    const shortName = merged.subjects?.sub_short_form || merged.subjects?.subject_name || subjectShortMap.get(merged.subject_id) || subjectNameMap.get(merged.subject_id) || merged.subject_id;
+                                    const batchCode = merged.batch_id ? (merged.batches?.batch_code || batchCodeMap.get(merged.batch_id) || merged.batch_id) : null;
                                     const isLabOrTutorial = ['LAB', 'TUTORIAL'].includes((merged.session_type || '').toUpperCase());
                                     const identityLabel = modalState.section === 'faculty'
-                                      ? (divisionNameMap.get(merged.division_id) || merged.division_id)
-                                      : (facultyNameMap.get(merged.faculty_id) || merged.faculty_id);
+                                      ? (merged.divisions?.division_name || divisionNameMap.get(merged.division_id) || merged.division_id)
+                                      : (merged.faculty?.faculty_name || facultyNameMap.get(merged.faculty_id) || merged.faculty_id);
                                     return (
                                       <div
                                         key={`${merged.entry_id || `${merged.day_id}-${merged.slot_id}`}-${index}`}
@@ -861,7 +896,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                                         >
                                           {merged.session_type || 'THEORY'}
                                         </div>
-                                        <div className="p-1 text-center leading-tight text-slate-700 font-medium">{roomNameMap.get(merged.room_id) || merged.room_id}</div>
+                                        <div className="p-1 text-center leading-tight text-slate-700 font-medium">{merged.rooms?.room_number || roomNameMap.get(merged.room_id) || merged.room_id}</div>
                                       </div>
                                     );
                                   })}

@@ -2,41 +2,35 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Lock, ArrowRight, Phone, Building2, Briefcase, Loader2 } from 'lucide-react';
+import { User, Mail, Lock, ArrowRight, Phone, Building2, Loader2 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export default function SignupForm({ onFlip }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [departments, setDepartments] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    department_id: '',
-    role: 'Time Table Coordinator',
+    role: 'Time Table Coordinator', // Fixed role for self-registration
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    new_department_name: '',
+    new_department_code: '',
   });
 
-  // Fetch departments on mount
+  // Fetch departments on mount - removed as coordinators create their own department
   useEffect(() => {
-    const fetchDepartments = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/departments`);
-        const data = await response.json();
-        setDepartments(data.data || []);
-      } catch (err) {
-        console.error('Failed to fetch departments:', err);
-      }
-    };
-
-    fetchDepartments();
+    // No longer needed - coordinators always create new departments
   }, []);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    setFormData({ 
+      ...formData, 
+      [name]: type === 'checkbox' ? checked : value 
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -48,9 +42,9 @@ export default function SignupForm({ onFlip }) {
       return;
     }
 
-    // Validate department for coordinator/HOD/Faculty
-    if (['Time Table Coordinator', 'Head of Dept', 'Faculty'].includes(formData.role) && !formData.department_id) {
-      setError(`${formData.role} must be assigned to a department`);
+    // Validate department name and code
+    if (!formData.new_department_name.trim() || !formData.new_department_code.trim()) {
+      setError("Please provide both department name and code");
       return;
     }
 
@@ -62,13 +56,10 @@ export default function SignupForm({ onFlip }) {
         password: formData.password,
         name: formData.name,
         phone: formData.phone,
-        role: formData.role
+        role: formData.role,
+        new_department_name: formData.new_department_name.trim(),
+        new_department_code: formData.new_department_code.trim(),
       };
-
-      // Add department info
-      if (formData.department_id) {
-        signupData.department_id = formData.department_id;
-      }
 
       const response = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: 'POST',
@@ -84,11 +75,14 @@ export default function SignupForm({ onFlip }) {
         throw new Error(data.detail || "Signup failed");
       }
 
+      console.log('[SIGNUP] Registration successful:', data);
       alert("Account created successfully! Please sign in.");
+      
+      // Redirect to login (flip the card)
       onFlip();
 
     } catch (err) {
-      console.error(err);
+      console.error('[SIGNUP ERROR]', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -98,11 +92,11 @@ export default function SignupForm({ onFlip }) {
   return (
     <div className="w-full h-full relative group">
         <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-indigo-500 rounded-2xl opacity-75 blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-        <div className="relative w-full h-full bg-gray-900 border border-white/10 rounded-2xl p-8 flex flex-col justify-center shadow-2xl backdrop-blur-xl overflow-y-auto max-h-[90vh]">
+        <div className="relative w-full h-full bg-gray-900 border border-white/10 rounded-2xl p-8 flex flex-col justify-center shadow-2xl backdrop-blur-xl">
             
             <div className="mb-6 text-center">
-                <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 mb-2">Create Account</h2>
-                <p className="text-gray-400 text-sm">Join the future of academic scheduling</p>
+                <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 mb-2">Create Your Department</h2>
+                <p className="text-gray-400 text-sm">Register as a coordinator and set up your department</p>
             </div>
 
             {error && (
@@ -111,19 +105,19 @@ export default function SignupForm({ onFlip }) {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Full Name</label>
                         <div className="relative group/input">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
                             <input 
                             type="text" 
                             name="name"
                             required
                             value={formData.name}
                             onChange={handleChange}
-                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
                             placeholder="John Doe"
                             />
                         </div>
@@ -132,14 +126,14 @@ export default function SignupForm({ onFlip }) {
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Phone</label>
                         <div className="relative group/input">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
                             <input 
                             type="tel" 
                             name="phone"
                             required
                             value={formData.phone}
                             onChange={handleChange}
-                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
                             placeholder="+91 98765 43210"
                             />
                         </div>
@@ -149,90 +143,90 @@ export default function SignupForm({ onFlip }) {
                 <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Email Address</label>
                 <div className="relative group/input">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
                     <input 
                     type="email" 
                     name="email"
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
                     placeholder="name@example.com"
                     />
                 </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* Department Creation Section */}
+                <div className="space-y-3 p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Building2 className="h-4 w-4 text-indigo-400" />
+                        <h3 className="text-sm font-semibold text-indigo-300">Department Information</h3>
+                    </div>
+                    
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Role</label>
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
+                            Department Name <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            name="new_department_name"
+                            value={formData.new_department_name}
+                            onChange={handleChange}
+                            required
+                            placeholder="e.g., Computer Science & AI"
+                            className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
+                            Department Code <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            name="new_department_code"
+                            value={formData.new_department_code}
+                            onChange={handleChange}
+                            required
+                            placeholder="e.g., CSAI"
+                            maxLength={10}
+                            className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner uppercase"
+                        />
+                        <p className="text-xs text-gray-500 ml-1">Short code (max 10 characters, e.g., CS, CSAI, MECH)</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Password</label>
                         <div className="relative group/input">
-                            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
-                            <select 
-                                name="role"
-                                value={formData.role}
-                                onChange={handleChange}
-                                className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option className="bg-gray-900" value="Time Table Coordinator">Coordinator</option>
-                                <option className="bg-gray-900" value="Head of Dept">HOD</option>
-                                <option className="bg-gray-900" value="Faculty">Faculty</option>
-                                <option className="bg-gray-900" value="Student">Student</option>
-                            </select>
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <input 
+                            type="password" 
+                            name="password"
+                            required
+                            value={formData.password}
+                            onChange={handleChange}
+                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            placeholder="Create a password"
+                            />
                         </div>
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Department</label>
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Confirm Password</label>
                         <div className="relative group/input">
-                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
-                            <select 
-                                name="department_id"
-                                value={formData.department_id}
-                                onChange={handleChange}
-                                required={['Time Table Coordinator', 'Head of Dept', 'Faculty'].includes(formData.role)}
-                                className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option value="">Select Department</option>
-                                {departments.map(dept => (
-                                    <option key={dept.department_id} className="bg-gray-900" value={dept.department_id}>
-                                        {dept.department_name}
-                                    </option>
-                                ))}
-                            </select>
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <input 
+                            type="password" 
+                            name="confirmPassword"
+                            required
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            placeholder="Confirm password"
+                            />
                         </div>
                     </div>
-                </div>
-
-                <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Password</label>
-                <div className="relative group/input">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
-                    <input 
-                    type="password" 
-                    name="password"
-                    required
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
-                    placeholder="Create a password"
-                    />
-                </div>
-                </div>
-
-                <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Confirm Password</label>
-                <div className="relative group/input">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
-                    <input 
-                    type="password" 
-                    name="confirmPassword"
-                    required
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-9 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
-                    placeholder="Confirm password"
-                    />
-                </div>
                 </div>
 
                 <motion.button
@@ -247,7 +241,7 @@ export default function SignupForm({ onFlip }) {
                     <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                     <span className="relative z-10 flex items-center gap-2 text-sm">
-                        Get Started <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                        Create Department & Register <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
                     </span>
                 )}
                 </motion.button>

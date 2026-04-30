@@ -3,6 +3,8 @@ import csv
 import io
 import secrets
 import string
+import bcrypt
+import uuid
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, CurrentUser, get_current_user_with_profile, require_role
@@ -22,8 +24,23 @@ class SignupRequest(BaseModel):
     """Department UUID if user is coordinator/HOD"""
     department_name: str | None = None
     """Department name as fallback (will be resolved to ID)"""
+    new_department_name: str | None = None
+    """New department name for coordinator self-registration"""
+    new_department_code: str | None = None
+    """New department code for coordinator self-registration"""
     role: str
     """Role: 'Time Table Coordinator', 'Head of Dept', or 'Student'"""
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: dict
 
 
 class CoordinatorUserCreateRequest(BaseModel):
@@ -41,6 +58,18 @@ class StudentEnrollmentUpdateRequest(BaseModel):
 def _generate_random_password(length: int = 12) -> str:
     chars = string.ascii_letters + string.digits + "!@#$%&*"
     return "".join(secrets.choice(chars) for _ in range(length))
+
+
+def _hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+
+def _verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash."""
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
 def _normalize_role(value: str) -> str:
@@ -76,19 +105,328 @@ def _upsert_profile_with_compat(supabase, payload: dict) -> None:
 @router.post("/signup", response_model=SuccessResponse)
 async def signup(request: SignupRequest) -> dict:
     """
-    Register a new user and create their profile with role-based access.
+    Register a new coordinator and create their department.
     
-    Handles role assignment:
-    - 'Time Table Coordinator' -> COORDINATOR role
-    - 'Head of Dept' -> HOD role
-    - 'Student' -> STUDENT role
+    Uses custom authentication (no Supabase Auth) - stores credentials in user_profiles table.
     
-    Uses service role to safely create user and profile, bypassing RLS.
+    Coordinators create their own department during registration.
     """
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Public registration is disabled. Please contact coordinator for account creation.",
-    )
+    try:
+        supabase = get_service_supabase()
+        
+        # Normalize role
+        role = _normalize_role(request.role)
+        print(f"[SIGNUP] Starting signup for {request.email} with role {role}")
+        
+        # Check if email already exists
+        existing_user = (
+            supabase.table("user_profiles")
+            .select("email")
+            .eq("email", request.email)
+            .execute()
+        )
+        
+        if existing_user.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered. Please use a different email or login.",
+            )
+        
+        # Handle department creation for coordinators
+        department_id = request.department_id
+        
+        if role == "COORDINATOR":
+            # Coordinator must create a new department
+            if request.new_department_name and request.new_department_code:
+                print(f"[SIGNUP] Creating new department: {request.new_department_name} ({request.new_department_code})")
+                
+                # Create new department
+                dept_data = {
+                    "department_name": request.new_department_name.strip(),
+                    "department_code": request.new_department_code.strip().upper(),
+                }
+                
+                # Check if department code already exists
+                try:
+                    existing_dept = (
+                        supabase.table("departments")
+                        .select("department_id")
+                        .eq("department_code", dept_data["department_code"])
+                        .execute()
+                    )
+                    print(f"[SIGNUP] Department code check result: {existing_dept.data}")
+                except Exception as dept_check_error:
+                    print(f"[SIGNUP ERROR] Failed to check department code: {str(dept_check_error)}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Database error checking department code: {str(dept_check_error)}",
+                    )
+                
+                if existing_dept.data:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Department code '{dept_data['department_code']}' already exists. Please choose a different code.",
+                    )
+                
+                # Create department
+                try:
+                    dept_response = (
+                        supabase.table("departments")
+                        .insert(dept_data)
+                        .execute()
+                    )
+                    print(f"[SIGNUP] Department created: {dept_response.data}")
+                except Exception as dept_create_error:
+                    print(f"[SIGNUP ERROR] Failed to create department: {str(dept_create_error)}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Failed to create department: {str(dept_create_error)}",
+                    )
+                
+                if not dept_response.data:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Failed to create department - no data returned",
+                    )
+                
+                department_id = dept_response.data[0]["department_id"]
+                print(f"[SIGNUP] Department ID: {department_id}")
+            
+            elif not department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Coordinator must provide department information",
+                )
+        
+        elif role in ["HOD", "FACULTY"]:
+            # HOD and Faculty must select existing department
+            if not department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{role} must be assigned to an existing department",
+                )
+        
+        # Hash the password
+        print(f"[SIGNUP] Hashing password for {request.email}")
+        password_hash = _hash_password(request.password)
+        
+        # Generate user ID
+        user_id = str(uuid.uuid4())
+        
+        # Create user profile with hashed password
+        print(f"[SIGNUP] Creating user profile for {request.email}")
+        profile_payload = {
+            "user_id": user_id,
+            "email": request.email,
+            "password_hash": password_hash,
+            "name": request.name,
+            "phone": request.phone,
+            "role": role,
+            "department_id": department_id,
+            "is_hod": role == "HOD",
+            "is_coordinator": role == "COORDINATOR",
+        }
+        
+        try:
+            profile_response = (
+                supabase.table("user_profiles")
+                .insert(profile_payload)
+                .execute()
+            )
+            print(f"[SIGNUP] User profile created successfully")
+        except Exception as profile_error:
+            print(f"[SIGNUP ERROR] Failed to create user profile: {str(profile_error)}")
+            # If profile creation fails, try to clean up the department
+            if role == "COORDINATOR" and department_id:
+                try:
+                    supabase.table("departments").delete().eq("department_id", department_id).execute()
+                    print(f"[SIGNUP] Cleaned up department {department_id} after profile creation failure")
+                except:
+                    pass
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to create user profile: {str(profile_error)}",
+            )
+        
+        print(f"[SIGNUP] Signup completed successfully for {request.email}")
+        return {
+            "data": {
+                "user_id": user_id,
+                "email": request.email,
+                "role": role,
+                "department_id": department_id,
+            },
+            "message": "Account created successfully! Please log in.",
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SIGNUP ERROR] Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to create account: {str(e)}",
+        )
+
+
+@router.post("/login")
+async def login(request: LoginRequest) -> dict:
+    """
+    Custom login endpoint using email and password.
+    
+    Verifies credentials against user_profiles table (for staff) or students table (for students).
+    Returns a JWT token.
+    """
+    try:
+        supabase = get_service_supabase()
+        
+        print(f"[LOGIN] Login attempt for {request.email}")
+        
+        # Try user_profiles first (for coordinators, HOD, faculty)
+        user_response = (
+            supabase.table("user_profiles")
+            .select("*")
+            .eq("email", request.email)
+            .execute()
+        )
+        
+        if user_response.data:
+            # Staff login (coordinator, HOD, faculty)
+            user = user_response.data[0]
+            
+            # Verify password
+            if not user.get("password_hash"):
+                print(f"[LOGIN] No password hash for user: {request.email}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                )
+            
+            if not _verify_password(request.password, user["password_hash"]):
+                print(f"[LOGIN] Invalid password for user: {request.email}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                )
+            
+            # Generate JWT token for staff
+            from datetime import datetime, timedelta
+            import jwt
+            from app.config import settings
+            
+            payload = {
+                "sub": user["user_id"],
+                "email": user["email"],
+                "role": user["role"],
+                "department_id": user.get("department_id"),
+                "exp": datetime.utcnow() + timedelta(days=7),
+                "iat": datetime.utcnow(),
+            }
+            
+            token = jwt.encode(payload, settings.supabase_service_role_key, algorithm="HS256")
+            
+            print(f"[LOGIN] Staff login successful for {request.email}")
+            
+            return {
+                "access_token": token,
+                "token_type": "bearer",
+                "user": {
+                    "user_id": user["user_id"],
+                    "email": user["email"],
+                    "name": user.get("name"),
+                    "role": user["role"],
+                    "department_id": user.get("department_id"),
+                    "is_hod": user.get("is_hod", False),
+                    "is_coordinator": user.get("is_coordinator", False),
+                },
+            }
+        
+        # Try students table (for student login)
+        student_response = (
+            supabase.table("students")
+            .select("*, divisions(department_id)")
+            .eq("email", request.email)
+            .execute()
+        )
+        
+        if not student_response.data:
+            print(f"[LOGIN] User/Student not found: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+        
+        student = student_response.data[0]
+        
+        # Verify password
+        if not student.get("password_hash"):
+            print(f"[LOGIN] No password hash for student: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+        
+        if not _verify_password(request.password, student["password_hash"]):
+            print(f"[LOGIN] Invalid password for student: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+        
+        # Generate JWT token for student
+        from datetime import datetime, timedelta
+        import jwt
+        from app.config import settings
+        
+        # Get department_id from division
+        department_id = student.get("divisions", {}).get("department_id") if student.get("divisions") else None
+        
+        # Use student_id as the unique identifier (not user_id which may be null)
+        student_id = student.get("student_id")
+        
+        payload = {
+            "sub": student_id,  # Use student_id instead of user_id
+            "email": student["email"],
+            "role": "STUDENT",
+            "department_id": department_id,
+            "division_id": student.get("division_id"),
+            "prn": student.get("prn_number"),
+            "exp": datetime.utcnow() + timedelta(days=7),
+            "iat": datetime.utcnow(),
+        }
+        
+        token = jwt.encode(payload, settings.supabase_service_role_key, algorithm="HS256")
+        
+        print(f"[LOGIN] Student login successful for {request.email}")
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {
+                "user_id": student_id,  # Use student_id
+                "email": student["email"],
+                "name": student.get("student_name"),
+                "role": "STUDENT",
+                "department_id": department_id,
+                "division_id": student.get("division_id"),
+                "prn": student.get("prn_number"),
+                "is_hod": False,
+                "is_coordinator": False,
+            },
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[LOGIN ERROR] Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}",
+        )
 
 
 @router.post("/coordinator/users", response_model=SuccessResponse)
@@ -270,6 +608,7 @@ async def get_current_user_profile(
     Get current authenticated user's profile with role and department info.
     
     Returns complete user information including role, department, and access flags.
+    Works with both custom JWT and Supabase Auth tokens.
     """
     try:
         return {

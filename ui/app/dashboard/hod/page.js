@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { BackgroundBeams } from '../../components/ui/BackgroundBeams';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
+import FacultyProfile from '../../components/Dashboard/FacultyProfile';
 import RoleGuard from '../../components/RoleGuard';
 import {
   CheckCircle2, Calendar, Users, BarChart3, AlertCircle,
@@ -27,6 +28,15 @@ export default function HODDashboard() {
     facultyCount: 0,
     divisionsCount: 0,
   });
+
+  // Analytics state
+  const [analytics, setAnalytics] = useState({
+    facultyWorkload: [],
+    roomUtilization: [],
+    leaveStats: null,
+    conflicts: [],
+  });
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   // Leave management state
   const [allLeaves, setAllLeaves] = useState([]);
@@ -78,8 +88,51 @@ export default function HODDashboard() {
   useEffect(() => {
     if (activeTab === 'leaves') {
       fetchAllLeaves();
+    } else if (activeTab === 'analytics') {
+      fetchAnalytics();
     }
   }, [activeTab]);
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoadingAnalytics(true);
+      const token = localStorage.getItem('authToken') || '';
+      
+      // Fetch all analytics data in parallel
+      const [workloadRes, roomRes, leaveStatsRes, conflictsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/analytics/faculty-workload`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/analytics/room-utilization`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/analytics/leave-statistics`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/analytics/timetable-conflicts`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+      ]);
+
+      const [workloadData, roomData, leaveStatsData, conflictsData] = await Promise.all([
+        workloadRes.ok ? workloadRes.json() : { data: { workload: [] } },
+        roomRes.ok ? roomRes.json() : { data: { utilization: [] } },
+        leaveStatsRes.ok ? leaveStatsRes.json() : { data: null },
+        conflictsRes.ok ? conflictsRes.json() : { data: { conflicts: [] } },
+      ]);
+
+      setAnalytics({
+        facultyWorkload: workloadData.data?.workload || [],
+        roomUtilization: roomData.data?.utilization || [],
+        leaveStats: leaveStatsData.data || null,
+        conflicts: conflictsData.data?.conflicts || [],
+      });
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
 
   const fetchAllLeaves = async () => {
     try {
@@ -452,14 +505,202 @@ export default function HODDashboard() {
 
       case 'analytics':
         return (
-          <div className="w-full max-w-6xl bg-gray-900/50 border border-gray-800 rounded-xl p-8 text-center space-y-4">
-            <BarChart3 className="w-16 h-16 text-blue-400 mx-auto" />
-            <h2 className="text-2xl font-bold text-white">Department Analytics</h2>
-            <p className="text-gray-400">
-              View scheduling efficiency, conflict reports, and resource utilization for your department.
-            </p>
+          <div className="w-full max-w-6xl space-y-6">
+            {/* Analytics Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
+                  <BarChart3 className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Department Analytics</h2>
+                  <p className="text-gray-400 text-sm">Insights into scheduling, workload, and resource utilization</p>
+                </div>
+              </div>
+              <button
+                onClick={fetchAnalytics}
+                disabled={loadingAnalytics}
+                className="px-4 py-2 text-sm font-semibold text-blue-300 border border-blue-500/30 rounded-lg hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+              >
+                {loadingAnalytics ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+
+            {loadingAnalytics ? (
+              <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Loading analytics...
+              </div>
+            ) : (
+              <>
+                {/* Leave Statistics */}
+                {analytics.leaveStats && (
+                  <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-indigo-400" />
+                      Leave Statistics
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-gray-800/50 rounded-lg p-4 space-y-1">
+                        <p className="text-sm text-gray-400">Total Leaves</p>
+                        <p className="text-2xl font-bold text-white">{analytics.leaveStats.total_leaves}</p>
+                      </div>
+                      <div className="bg-yellow-900/20 border border-yellow-500/20 rounded-lg p-4 space-y-1">
+                        <p className="text-sm text-yellow-400">Pending</p>
+                        <p className="text-2xl font-bold text-yellow-300">{analytics.leaveStats.pending}</p>
+                      </div>
+                      <div className="bg-green-900/20 border border-green-500/20 rounded-lg p-4 space-y-1">
+                        <p className="text-sm text-green-400">Approved</p>
+                        <p className="text-2xl font-bold text-green-300">{analytics.leaveStats.approved}</p>
+                      </div>
+                      <div className="bg-red-900/20 border border-red-500/20 rounded-lg p-4 space-y-1">
+                        <p className="text-sm text-red-400">Rejected</p>
+                        <p className="text-2xl font-bold text-red-300">{analytics.leaveStats.rejected}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Faculty Workload */}
+                <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 space-y-4">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-400" />
+                    Faculty Workload Distribution
+                  </h3>
+                  {analytics.facultyWorkload.length === 0 ? (
+                    <p className="text-gray-400 text-sm">No workload data available</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {analytics.facultyWorkload.slice(0, 10).map((faculty) => (
+                        <div key={faculty.faculty_id} className="bg-gray-800/30 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex-1">
+                              <p className="font-medium text-white">{faculty.faculty_name}</p>
+                              <p className="text-xs text-gray-500">{faculty.email}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-white">
+                                {faculty.total_slots} / {faculty.max_load} slots
+                              </p>
+                              <p className={`text-xs font-medium ${
+                                faculty.utilization_percentage > 90 ? 'text-red-400' :
+                                faculty.utilization_percentage > 70 ? 'text-yellow-400' :
+                                'text-green-400'
+                              }`}>
+                                {faculty.utilization_percentage}% utilized
+                              </p>
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                faculty.utilization_percentage > 90 ? 'bg-red-500' :
+                                faculty.utilization_percentage > 70 ? 'bg-yellow-500' :
+                                'bg-green-500'
+                              }`}
+                              style={{ width: `${Math.min(faculty.utilization_percentage, 100)}%` }}
+                            />
+                          </div>
+                          <div className="flex gap-4 mt-2 text-xs text-gray-400">
+                            <span>Theory: {faculty.theory_slots}</span>
+                            <span>Lab: {faculty.lab_slots}</span>
+                            <span>Tutorial: {faculty.tutorial_slots}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Room Utilization */}
+                <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 space-y-4">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-400" />
+                    Room Utilization
+                  </h3>
+                  {analytics.roomUtilization.length === 0 ? (
+                    <p className="text-gray-400 text-sm">No room utilization data available</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {analytics.roomUtilization.slice(0, 8).map((room) => (
+                        <div key={room.room_id} className="bg-gray-800/30 rounded-lg p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-white">{room.room_name}</p>
+                              <p className="text-xs text-gray-500">{room.room_type} • Capacity: {room.capacity}</p>
+                            </div>
+                            <p className={`text-sm font-semibold ${
+                              room.utilization_percentage > 70 ? 'text-green-400' :
+                              room.utilization_percentage > 40 ? 'text-yellow-400' :
+                              'text-red-400'
+                            }`}>
+                              {room.utilization_percentage}%
+                            </p>
+                          </div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                room.utilization_percentage > 70 ? 'bg-green-500' :
+                                room.utilization_percentage > 40 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${room.utilization_percentage}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            {room.used_slots} / {room.total_possible_slots} slots used
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Timetable Conflicts */}
+                <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 space-y-4">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-red-400" />
+                    Timetable Conflicts
+                  </h3>
+                  {analytics.conflicts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-2" />
+                      <p className="text-green-400 font-medium">No conflicts detected!</p>
+                      <p className="text-gray-500 text-sm">Your timetable is conflict-free</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {analytics.conflicts.map((conflict, idx) => (
+                        <div key={idx} className="bg-red-900/10 border border-red-500/20 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-medium text-red-300">
+                                {conflict.type === 'FACULTY_DOUBLE_BOOKING' ? 'Faculty Double Booking' : 'Room Double Booking'}
+                              </p>
+                              <p className="text-sm text-gray-400 mt-1">
+                                {conflict.entry_count} entries scheduled in the same slot
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Day: {conflict.day_id} • Slot: {conflict.slot_id}
+                              </p>
+                            </div>
+                            <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-semibold rounded">
+                              {conflict.severity}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         );
+
+      case 'profile':
+        return <FacultyProfile />;
 
       default:
         return null;

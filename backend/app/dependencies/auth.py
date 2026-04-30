@@ -54,8 +54,7 @@ async def get_current_user(request: Request) -> CurrentUser:
     Extract and validate JWT token from Authorization header.
     
     Decodes the JWT and extracts user information from the Authorization header.
-    NOTE: Token is NOT verified here (Supabase will verify via RLS).
-    This extracts the sub (user ID) claim for identification.
+    Verifies custom JWT tokens created by our login endpoint.
     
     Args:
         request: FastAPI request object containing headers
@@ -106,39 +105,61 @@ async def get_current_user(request: Request) -> CurrentUser:
         )
 
     try:
-        # Decode without verification - Supabase RLS will enforce security
-        # We're only extracting the user ID for request context
-        payload = decode(
-            token,
-            options={"verify_signature": False},
-            audience="authenticated",
-        )
+        # Try to decode as custom JWT first (with verification)
+        try:
+            payload = decode(
+                token,
+                settings.supabase_service_role_key,
+                algorithms=["HS256"],
+            )
+            
+            # Custom JWT format
+            uid: str = payload.get("sub")
+            email: str | None = payload.get("email")
+            token_role = _normalize_role(payload.get("role"))
+            department_id = payload.get("department_id")
 
-        uid: str = payload.get("sub")
-        email: str | None = payload.get("email")
-        user_meta = payload.get("user_metadata") or {}
-        token_role = _normalize_role(user_meta.get("role"))
+            if uid is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token: missing 'sub' claim",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
-        if uid is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: missing 'sub' claim",
-                headers={"WWW-Authenticate": "Bearer"},
+            return CurrentUser(
+                uid=uid,
+                email=email,
+                aud="authenticated",
+                role=token_role,
+                department_id=department_id,
+            )
+        except (DecodeError, ExpiredSignatureError):
+            # If custom JWT fails, try Supabase JWT format (backward compatibility)
+            payload = decode(
+                token,
+                options={"verify_signature": False},
+                audience="authenticated",
             )
 
-        return CurrentUser(
-            uid=uid,
-            email=email,
-            aud=payload.get("aud", "authenticated"),
-            role=token_role,
-        )
+            uid: str = payload.get("sub")
+            email: str | None = payload.get("email")
+            user_meta = payload.get("user_metadata") or {}
+            token_role = _normalize_role(user_meta.get("role"))
 
-    except DecodeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token decode error: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+            if uid is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token: missing 'sub' claim",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            return CurrentUser(
+                uid=uid,
+                email=email,
+                aud=payload.get("aud", "authenticated"),
+                role=token_role,
+            )
+
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
