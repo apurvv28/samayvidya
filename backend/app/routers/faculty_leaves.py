@@ -74,6 +74,8 @@ def _get_faculty_for_user_email(current_user: CurrentUser) -> dict | None:
 
 def _get_affected_timetable_entries(faculty_id: str, start_date: str, end_date: str, leave_type: str):
     """Get all timetable entries affected by a leave period."""
+    from datetime import datetime, timedelta
+    
     supabase = get_service_supabase()
     
     # Get the latest timetable version
@@ -90,16 +92,62 @@ def _get_affected_timetable_entries(faculty_id: str, start_date: str, end_date: 
     
     version_id = version_response.data[0]["version_id"]
     
+    # Get days mapping from database
+    days_response = supabase.table("days").select("day_id, day_name").execute()
+    days_map = {day["day_name"].upper(): day["day_id"] for day in (days_response.data or [])}
+    
+    # Calculate which days of the week are affected
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    # Get all dates in the leave period
+    affected_day_ids = set()
+    current = start
+    while current <= end:
+        # Get day name (e.g., "MONDAY", "SUNDAY")
+        day_name = current.strftime("%A").upper()
+        if day_name in days_map:
+            affected_day_ids.add(days_map[day_name])
+        current += timedelta(days=1)
+    
+    print(f"Leave period: {start_date} to {end_date}")
+    print(f"Affected day_ids: {affected_day_ids}")
+    
     # Get all entries for this faculty in the latest version
     entries_response = (
         supabase.table("timetable_entries")
-        .select("*, divisions(division_name), subjects(subject_name), days(day_name), time_slots(start_time, end_time)")
+        .select("*, divisions(division_name), subjects(subject_name), days(day_name, day_id), time_slots(start_time, end_time), rooms(room_number)")
         .eq("version_id", version_id)
         .eq("faculty_id", faculty_id)
         .execute()
     )
     
-    return entries_response.data or []
+    all_entries = entries_response.data or []
+    print(f"Total entries for faculty: {len(all_entries)}")
+    
+    # Filter entries by affected day_ids
+    affected_entries = [
+        entry for entry in all_entries
+        if entry.get("day_id") in affected_day_ids
+    ]
+    
+    print(f"Filtered entries by day_id: {len(affected_entries)}")
+    
+    # If half-day leave, further filter by time
+    if leave_type == "HALF_DAY_FIRST":
+        # First half: slots before 13:00
+        affected_entries = [
+            entry for entry in affected_entries
+            if entry.get("time_slots") and entry["time_slots"].get("end_time", "23:59") <= "13:00"
+        ]
+    elif leave_type == "HALF_DAY_SECOND":
+        # Second half: slots after 13:00
+        affected_entries = [
+            entry for entry in affected_entries
+            if entry.get("time_slots") and entry["time_slots"].get("start_time", "00:00") >= "13:00"
+        ]
+    
+    return affected_entries
 
 
 def _get_students_for_division(division_id: str):
@@ -364,6 +412,35 @@ async def update_faculty_leave(
             "related_leave_id": leave_id,
             "status": "SENT"
         }).execute()
+        
+        # If approved, notify coordinators about potential slot adjustments
+        if leave.status.value == "APPROVED":
+            try:
+                dept_id = faculty_info.get("department_id")
+                if dept_id:
+                    coordinators_response = (
+                        supabase.table("user_profiles")
+                        .select("email")
+                        .eq("department_id", dept_id)
+                        .eq("role", "COORDINATOR")
+                        .execute()
+                    )
+                    
+                    for coordinator in (coordinators_response.data or []):
+                        if coordinator.get("email"):
+                            try:
+                                supabase.table("notification_log").insert({
+                                    "notification_type": "LEAVE_APPROVED",
+                                    "recipient_email": coordinator["email"],
+                                    "recipient_type": "COORDINATOR",
+                                    "subject": "Faculty Leave Approved - Action Required",
+                                    "body": f"{faculty_name}'s leave from {leave_data.get('start_date')} to {leave_data.get('end_date')} has been approved. Please review slot adjustments.",
+                                    "status": "SENT"
+                                }).execute()
+                            except Exception as e:
+                                print(f"Failed to send coordinator notification: {e}")
+            except Exception as e:
+                print(f"Failed to notify coordinators: {e}")
         
         return {
             "data": response.data,

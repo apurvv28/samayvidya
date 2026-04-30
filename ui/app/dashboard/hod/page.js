@@ -327,6 +327,7 @@ export default function HODDashboard() {
             <TimetableViewer
               versionId={latestVersionId}
               onVersionChange={(newVersionId) => setLatestVersionId(newVersionId)}
+              canManageTimetable
             />
           </div>
         );

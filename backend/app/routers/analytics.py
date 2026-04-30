@@ -195,20 +195,29 @@ async def get_room_utilization(
                     "message": "No timetable version found",
                 }
         
-        # Get all rooms
+        # Get all rooms - use room_number instead of room_name
         rooms_response = (
             supabase.table("rooms")
-            .select("room_id, room_name, room_type, capacity")
+            .select("room_id, room_number, room_type, capacity")
             .execute()
         )
         
         rooms_list = rooms_response.data or []
+        
+        if not rooms_list:
+            return {
+                "data": {"utilization": []},
+                "message": "No rooms found",
+            }
         
         # Get total possible slots (days * time_slots)
         days_response = supabase.table("days").select("day_id", count="exact").execute()
         slots_response = supabase.table("time_slots").select("slot_id", count="exact").execute()
         
         total_possible_slots = (days_response.count or 0) * (slots_response.count or 0)
+        
+        if total_possible_slots == 0:
+            total_possible_slots = 1  # Avoid division by zero
         
         # Get utilization for each room
         utilization_data = []
@@ -226,7 +235,7 @@ async def get_room_utilization(
             
             utilization_data.append({
                 "room_id": room["room_id"],
-                "room_name": room["room_name"],
+                "room_name": room.get("room_number", "Unknown"),  # Use room_number
                 "room_type": room.get("room_type", "CLASSROOM"),
                 "capacity": room.get("capacity", 0),
                 "used_slots": used_slots,

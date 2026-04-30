@@ -264,28 +264,10 @@ async def update_timetable_version(
     try:
         supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
         update_data = version.model_dump(exclude_unset=True)
-        incoming_meta = {key: update_data.pop(key) for key in _META_KEYS if key in update_data}
-
-        if incoming_meta:
-            current = (
-                supabase.table("timetable_versions")
-                .select("reason")
-                .eq("version_id", version_id)
-                .single()
-                .execute()
-                .data
-                or {}
-            )
-            current_reason = current.get("reason")
-            base_reason, existing_meta = _split_reason_and_meta(current_reason)
-
-            merged_meta = dict(existing_meta)
-            for key, value in incoming_meta.items():
-                merged_meta[key] = value
-
-            reason_source = update_data.get("reason", base_reason)
-            update_data["reason"] = _compose_reason_with_meta(reason_source, merged_meta)
-
+        
+        # Since wef_date and to_date are actual columns in the database,
+        # we should NOT treat them as metadata to be embedded in reason field
+        # Just update them directly
         response = (
             supabase.table("timetable_versions")
             .update(update_data)
@@ -326,4 +308,418 @@ async def delete_timetable_version(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to delete timetable version: {str(e)}",
+        )
+
+
+class ApprovalAction(BaseModel):
+    """Approval action request."""
+    rejection_reason: str | None = None
+
+
+@router.post("/{version_id}/verify", response_model=SuccessResponse)
+async def verify_timetable_version(
+    version_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Coordinator verifies timetable and forwards to HOD."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Check if user is coordinator
+        if current_user.role not in ["COORDINATOR", "ADMIN"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only coordinators can verify timetables"
+            )
+        
+        # Update timetable version
+        from datetime import datetime
+        response = (
+            supabase.table("timetable_versions")
+            .update({
+                "approval_status": "COORDINATOR_VERIFIED",
+                "verified_by": current_user.uid,
+                "verified_at": datetime.utcnow().isoformat()
+            })
+            .eq("version_id", version_id)
+            .execute()
+        )
+        
+        # Send notification to HOD
+        # Get department HOD
+        version_data = response.data[0] if response.data else {}
+        dept_id = version_data.get("department_id")
+        
+        if dept_id:
+            hod_response = (
+                supabase.table("user_profiles")
+                .select("email")
+                .eq("department_id", dept_id)
+                .eq("role", "HOD")
+                .execute()
+            )
+            
+            if hod_response.data:
+                for hod in hod_response.data:
+                    try:
+                        supabase.table("notification_log").insert({
+                            "notification_type": "TIMETABLE_VERIFICATION",
+                            "recipient_email": hod["email"],
+                            "recipient_type": "HOD",
+                            "subject": "Timetable Ready for Approval",
+                            "body": f"A timetable version has been verified by coordinator and is ready for your approval.",
+                            "status": "SENT"
+                        }).execute()
+                    except Exception as e:
+                        print(f"Failed to send notification: {e}")
+        
+        return {
+            "data": _hydrate_version_row(response.data[0] if response.data else {}),
+            "message": "Timetable verified and forwarded to HOD"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify timetable: {str(e)}"
+        )
+
+
+@router.post("/{version_id}/approve", response_model=SuccessResponse)
+async def approve_timetable_version(
+    version_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """HOD approves and freezes timetable for the specified period."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Check if user is HOD
+        if current_user.role not in ["HOD", "ADMIN"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only HOD can approve timetables"
+            )
+        
+        # Get timetable to check if it has valid dates
+        version_response = (
+            supabase.table("timetable_versions")
+            .select("*")
+            .eq("version_id", version_id)
+            .single()
+            .execute()
+        )
+        
+        if not version_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timetable version not found"
+            )
+        
+        # Check direct columns for dates (they exist in the database schema)
+        version_data = version_response.data
+        wef_date = version_data.get("wef_date")
+        to_date = version_data.get("to_date")
+        
+        # Validate that dates are set
+        if not wef_date or not to_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Timetable must have 'W.E.F' and 'To Date' set before approval. Please set these dates in the metadata section and click 'Save Metadata'."
+            )
+        
+        # Update timetable version - approve and freeze
+        from datetime import datetime
+        response = (
+            supabase.table("timetable_versions")
+            .update({
+                "approval_status": "HOD_APPROVED",
+                "approved_by": current_user.uid,
+                "approved_at": datetime.utcnow().isoformat(),
+                "is_active": True,
+                "is_frozen": True,
+                "frozen_at": datetime.utcnow().isoformat()
+            })
+            .eq("version_id", version_id)
+            .execute()
+        )
+        
+        # Deactivate other versions in the same department
+        dept_id = version_data.get("department_id")
+        
+        if dept_id:
+            supabase.table("timetable_versions").update({
+                "is_active": False
+            }).eq("department_id", dept_id).neq("version_id", version_id).execute()
+        
+        # Send notification to coordinator about approval
+        try:
+            coordinators_response = (
+                supabase.table("user_profiles")
+                .select("email")
+                .eq("department_id", dept_id)
+                .eq("role", "COORDINATOR")
+                .execute()
+            )
+            
+            for coordinator in (coordinators_response.data or []):
+                if coordinator.get("email"):
+                    try:
+                        supabase.table("notification_log").insert({
+                            "notification_type": "TIMETABLE_APPROVED",
+                            "recipient_email": coordinator["email"],
+                            "recipient_type": "COORDINATOR",
+                            "subject": "Timetable Approved and Frozen",
+                            "body": f"The timetable has been approved by HOD and is now frozen for the period {wef_date} to {to_date}.",
+                            "status": "SENT"
+                        }).execute()
+                    except Exception as e:
+                        print(f"Failed to send coordinator notification: {e}")
+        except Exception as e:
+            print(f"Failed to notify coordinators: {e}")
+        
+        return {
+            "data": _hydrate_version_row(response.data[0] if response.data else {}),
+            "message": f"Timetable approved and frozen for period {wef_date} to {to_date}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve timetable: {str(e)}"
+        )
+
+
+@router.post("/{version_id}/reject", response_model=SuccessResponse)
+async def reject_timetable_version(
+    version_id: str,
+    action: ApprovalAction,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Coordinator or HOD rejects timetable."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Check if user is coordinator or HOD
+        if current_user.role not in ["COORDINATOR", "HOD", "ADMIN"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only coordinators and HOD can reject timetables"
+            )
+        
+        # Update timetable version
+        response = (
+            supabase.table("timetable_versions")
+            .update({
+                "approval_status": "REJECTED",
+                "rejection_reason": action.rejection_reason,
+                "is_active": False
+            })
+            .eq("version_id", version_id)
+            .execute()
+        )
+        
+        return {
+            "data": _hydrate_version_row(response.data[0] if response.data else {}),
+            "message": "Timetable rejected"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject timetable: {str(e)}"
+        )
+
+
+class ExtendTimetableRequest(BaseModel):
+    """Request to extend timetable validity period."""
+    new_to_date: str  # ISO format: YYYY-MM-DD
+
+
+@router.post("/{version_id}/extend", response_model=SuccessResponse)
+async def extend_timetable_validity(
+    version_id: str,
+    request: ExtendTimetableRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Coordinator extends timetable validity period."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Check if user is coordinator
+        if current_user.role not in ["COORDINATOR", "ADMIN"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only coordinators can extend timetables"
+            )
+        
+        # Get current timetable
+        version_response = (
+            supabase.table("timetable_versions")
+            .select("*")
+            .eq("version_id", version_id)
+            .single()
+            .execute()
+        )
+        
+        if not version_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timetable version not found"
+            )
+        
+        version_data = version_response.data
+        
+        # Validate that timetable is approved and frozen
+        if version_data.get("approval_status") != "HOD_APPROVED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only approved timetables can be extended"
+            )
+        
+        # Validate new date is after current to_date
+        from datetime import datetime
+        current_to_date = version_data.get("to_date")
+        if current_to_date:
+            current_date = datetime.fromisoformat(str(current_to_date))
+            new_date = datetime.fromisoformat(request.new_to_date)
+            if new_date <= current_date:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="New end date must be after current end date"
+                )
+        
+        # Update timetable with new end date
+        response = (
+            supabase.table("timetable_versions")
+            .update({
+                "to_date": request.new_to_date,
+                "extension_requested": True,
+                "expiry_notified_at": None,  # Reset notification
+                "auto_delete_at": None  # Cancel auto-deletion
+            })
+            .eq("version_id", version_id)
+            .execute()
+        )
+        
+        # Notify HOD about extension
+        dept_id = version_data.get("department_id")
+        if dept_id:
+            try:
+                hod_response = (
+                    supabase.table("user_profiles")
+                    .select("email")
+                    .eq("department_id", dept_id)
+                    .eq("role", "HOD")
+                    .execute()
+                )
+                
+                for hod in (hod_response.data or []):
+                    if hod.get("email"):
+                        try:
+                            supabase.table("notification_log").insert({
+                                "notification_type": "TIMETABLE_EXTENDED",
+                                "recipient_email": hod["email"],
+                                "recipient_type": "HOD",
+                                "subject": "Timetable Validity Extended",
+                                "body": f"Coordinator has extended the timetable validity to {request.new_to_date}.",
+                                "status": "SENT"
+                            }).execute()
+                        except Exception as e:
+                            print(f"Failed to send HOD notification: {e}")
+            except Exception as e:
+                print(f"Failed to notify HOD: {e}")
+        
+        return {
+            "data": _hydrate_version_row(response.data[0] if response.data else {}),
+            "message": f"Timetable validity extended to {request.new_to_date}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extend timetable: {str(e)}"
+        )
+
+
+@router.get("/expiring/check", response_model=SuccessResponse)
+async def check_expiring_timetables(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Check for timetables that are expiring soon or need deletion."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Call the database function
+        response = supabase.rpc("check_expiring_timetables").execute()
+        
+        expiring = response.data or []
+        
+        # Process notifications and deletions
+        for item in expiring:
+            version_id = item.get("version_id")
+            should_notify = item.get("should_notify")
+            should_delete = item.get("should_delete")
+            
+            if should_notify:
+                # Send notification to coordinator
+                dept_id = item.get("department_id")
+                if dept_id:
+                    try:
+                        coordinators = (
+                            supabase.table("user_profiles")
+                            .select("email")
+                            .eq("department_id", dept_id)
+                            .eq("role", "COORDINATOR")
+                            .execute()
+                        )
+                        
+                        for coordinator in (coordinators.data or []):
+                            if coordinator.get("email"):
+                                supabase.table("notification_log").insert({
+                                    "notification_type": "TIMETABLE_EXPIRING",
+                                    "recipient_email": coordinator["email"],
+                                    "recipient_type": "COORDINATOR",
+                                    "subject": "Timetable Expiring Soon",
+                                    "body": f"A timetable will expire on {item.get('to_date')}. Please extend it if needed, or it will be auto-deleted 7 days after expiry.",
+                                    "status": "SENT"
+                                }).execute()
+                        
+                        # Mark as notified
+                        from datetime import datetime
+                        supabase.table("timetable_versions").update({
+                            "expiry_notified_at": datetime.utcnow().isoformat()
+                        }).eq("version_id", version_id).execute()
+                    except Exception as e:
+                        print(f"Failed to notify about expiring timetable: {e}")
+            
+            if should_delete:
+                # Auto-delete expired timetable
+                try:
+                    supabase.table("timetable_versions").delete().eq("version_id", version_id).execute()
+                    print(f"Auto-deleted expired timetable: {version_id}")
+                except Exception as e:
+                    print(f"Failed to auto-delete timetable: {e}")
+        
+        return {
+            "data": {
+                "expiring_count": len([x for x in expiring if x.get("should_notify")]),
+                "deleted_count": len([x for x in expiring if x.get("should_delete")]),
+                "details": expiring
+            },
+            "message": "Expiry check completed"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check expiring timetables: {str(e)}"
         )

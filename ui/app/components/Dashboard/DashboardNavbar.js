@@ -6,10 +6,11 @@ import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from './NotificationBell';
 
 export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { signOut } = useAuth();
+  const { signOut, profile } = useAuth();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -94,6 +95,9 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
               ))}
               
               <div className="h-6 w-px bg-gray-800 mx-2" />
+              
+              {/* Notification Bell */}
+              <NotificationBell userEmail={profile?.email} />
               
               <button
                 onClick={handleLogout}

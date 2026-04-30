@@ -42,6 +42,10 @@ export default function FacultyDashboard() {
   const [loadingLeaves, setLoadingLeaves] = useState(false);
   const [leavesError, setLeavesError] = useState(null);
 
+  // Affected slots state
+  const [affectedSlots, setAffectedSlots] = useState([]);
+  const [loadingAffectedSlots, setLoadingAffectedSlots] = useState(false);
+
   // Fetch faculty list and timetable version
   useEffect(() => {
     const fetchData = async () => {
@@ -92,6 +96,7 @@ export default function FacultyDashboard() {
   useEffect(() => {
     if (activeTab === 'my-leaves' && selectedFacultyId) {
       fetchMyLeaves();
+      fetchAffectedSlots();
     }
   }, [activeTab, selectedFacultyId]);
 
@@ -115,6 +120,27 @@ export default function FacultyDashboard() {
       setLeavesError(err.message);
     } finally {
       setLoadingLeaves(false);
+    }
+  };
+
+  const fetchAffectedSlots = async () => {
+    if (!selectedFacultyId) return;
+    try {
+      setLoadingAffectedSlots(true);
+      const token = localStorage.getItem('authToken') || '';
+      const res = await fetch(
+        `${API_BASE_URL}/slot-adjustments/my-affected-slots?faculty_id=${encodeURIComponent(selectedFacultyId)}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (!res.ok) {
+        throw new Error('Failed to fetch affected slots');
+      }
+      const data = await res.json();
+      setAffectedSlots(data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch affected slots:', err);
+    } finally {
+      setLoadingAffectedSlots(false);
     }
   };
 
@@ -258,7 +284,7 @@ export default function FacultyDashboard() {
       }
       
       // Request adjustment
-      const adjustRes = await fetch(`${API_BASE_URL}/faculty-leaves/request-adjustment`, {
+      const adjustRes = await fetch(`${API_BASE_URL}/slot-adjustments/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -277,8 +303,11 @@ export default function FacultyDashboard() {
       
       const adjustData = await adjustRes.json();
       setLeaveSuccess(
-        `Adjustment request sent! ${adjustData.data?.notified_faculty_count || 0} faculty members have been notified.`
+        `Adjustment request sent! ${adjustData.data?.affected_slots_count || 0} slots need coverage. Coordinator has been notified.`
       );
+      
+      // Refresh affected slots
+      fetchAffectedSlots();
       
       // Scroll to top to show success message
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -587,6 +616,79 @@ export default function FacultyDashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Affected Slots Section */}
+              {affectedSlots.length > 0 && (
+                <div className="mt-8 pt-8 border-t border-white/10">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-400" />
+                    My Affected Slots
+                  </h3>
+                  <div className="space-y-4">
+                    {affectedSlots.map((request) => (
+                      <div key={request.request_id} className="bg-gray-800/60 border border-yellow-500/20 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <p className="text-sm font-semibold text-white">
+                              Adjustment Request - {request.status}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Progress: {request.resolved_slots}/{request.total_affected_slots} slots resolved
+                            </p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            request.status === 'COMPLETED' ? 'bg-green-500/15 text-green-400 border border-green-500/20' :
+                            request.status === 'IN_PROGRESS' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20' :
+                            'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
+                          }`}>
+                            {request.status}
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {request.affected_slots.map((slot) => (
+                            <div key={slot.affected_slot_id} className="bg-gray-900/40 border border-white/5 rounded-lg p-3">
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
+                                <div>
+                                  <span className="text-gray-500">Day:</span>
+                                  <span className="ml-2 text-white font-medium">{slot.days?.day_name}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Time:</span>
+                                  <span className="ml-2 text-white font-medium">
+                                    {slot.time_slots?.start_time} - {slot.time_slots?.end_time}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Subject:</span>
+                                  <span className="ml-2 text-white font-medium">{slot.subjects?.subject_name}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Division:</span>
+                                  <span className="ml-2 text-white font-medium">{slot.divisions?.division_name}</span>
+                                </div>
+                              </div>
+                              {slot.replacement_faculty_id && slot.faculty && (
+                                <div className="mt-2 pt-2 border-t border-white/5">
+                                  <span className="text-xs text-green-400">
+                                    ✓ Covered by: {slot.faculty.faculty_name}
+                                  </span>
+                                </div>
+                              )}
+                              {slot.status === 'NO_REPLACEMENT' && (
+                                <div className="mt-2 pt-2 border-t border-white/5">
+                                  <span className="text-xs text-red-400">
+                                    ⚠ No faculty available for this slot
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { User, Clock, Save, Loader2, CheckCircle2 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import PasswordReset from './PasswordReset';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -270,6 +271,17 @@ export default function FacultyProfile() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Password Reset Section */}
+      <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-8 backdrop-blur-sm">
+        <div className="mb-6">
+          <h3 className="text-xl font-bold text-white mb-2">Password Management</h3>
+          <p className="text-gray-400 text-sm">
+            Change your password or reset it if you've forgotten it
+          </p>
+        </div>
+        <PasswordReset userEmail={facultyData.email} />
       </div>
     </div>
   );

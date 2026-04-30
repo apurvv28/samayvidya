@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { UserPlus, Mail, Phone, User, IdCard, Briefcase, Clock, Calendar, Target } from 'lucide-react';
+import { UserPlus, Mail, Phone, User, IdCard, Briefcase, Clock, Calendar, Target, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -12,6 +12,7 @@ export default function AddFaculty() {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loadingDepartment, setLoadingDepartment] = useState(true);
+  const [validationErrors, setValidationErrors] = useState(null);
   const [formData, setFormData] = useState({
     faculty_code: '',
     faculty_name: '',
@@ -92,6 +93,9 @@ export default function AddFaculty() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Clear previous errors
+    setValidationErrors(null);
+    
     // Validation
     if (!formData.faculty_code || !formData.faculty_name || !formData.email) {
       showToast('Please fill in all required fields', 'error');
@@ -135,9 +139,20 @@ export default function AddFaculty() {
         body: JSON.stringify(payload),
       });
 
+      console.log('[ADD FACULTY] Response status:', response.status);
       const data = await response.json();
+      console.log('[ADD FACULTY] Response data:', data);
 
       if (!response.ok) {
+        // Handle Pydantic validation errors
+        if (data.detail && Array.isArray(data.detail)) {
+          const errorMessages = data.detail.map(err => {
+            const field = err.loc ? err.loc.join('.') : 'unknown';
+            return `${field}: ${err.msg}`;
+          }).join(', ');
+          setValidationErrors(data.detail);
+          throw new Error(errorMessages);
+        }
         throw new Error(data.detail || 'Failed to add faculty');
       }
 
@@ -200,6 +215,26 @@ export default function AddFaculty() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8 bg-gray-900/50 p-8 rounded-2xl border border-gray-800 backdrop-blur-sm">
+        
+        {/* Validation Errors Display */}
+        {validationErrors && (
+          <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4">
+            <h4 className="text-red-400 font-semibold mb-2 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              Validation Errors:
+            </h4>
+            <ul className="space-y-1 text-sm text-red-300">
+              {validationErrors.map((err, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-red-500">•</span>
+                  <span>
+                    <strong>{err.loc ? err.loc.join('.') : 'Field'}:</strong> {err.msg}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         
         {/* Hidden Department ID Field for debugging */}
         <input type="hidden" name="department_id" value={formData.department_id} />

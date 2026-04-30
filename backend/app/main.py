@@ -25,6 +25,9 @@ from app.routers import (
     agent_routes,
     pdf,
     analytics,
+    slot_adjustments,
+    notifications,
+    password_reset,
 )
 from app.config import settings
 
@@ -114,6 +117,9 @@ app.include_router(academic_years.router)
 app.include_router(agent_routes.router)
 app.include_router(pdf.router)
 app.include_router(analytics.router)
+app.include_router(slot_adjustments.router)
+app.include_router(notifications.router)
+app.include_router(password_reset.router)
 
 
 @app.exception_handler(Exception)

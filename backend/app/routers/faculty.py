@@ -542,6 +542,10 @@ def _derive_priority_and_max_load(designation: str | None) -> tuple[int, int]:
 
 
 def _create_faculty_with_auth(supabase: Any, faculty: FacultyCreate) -> tuple[Any, str]:
+    import bcrypt
+    import uuid
+    
+    # Check if faculty code already exists
     existing_faculty = (
         supabase.table("faculty")
         .select("faculty_id")
@@ -556,46 +560,74 @@ def _create_faculty_with_auth(supabase: Any, faculty: FacultyCreate) -> tuple[An
 
     if not faculty.email:
         raise HTTPException(status_code=400, detail="Email is required for new faculty")
+    
+    # Check if email already exists in user_profiles
+    existing_user = (
+        supabase.table("user_profiles")
+        .select("email")
+        .eq("email", faculty.email)
+        .execute()
+    )
+    if existing_user.data:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email '{faculty.email}' is already registered.",
+        )
 
+    # Generate password: FirstName + last 4 digits of phone
     first_name = faculty.faculty_name.split()[0]
     phone_digits = "".join(filter(str.isdigit, faculty.phone or ""))
     phone_suffix = phone_digits[-4:] if len(phone_digits) >= 4 else "1234"
     password = f"{first_name}{phone_suffix}"
+    
+    # Hash password using bcrypt (matching the auth.py login system)
+    salt = bcrypt.gensalt()
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    
+    # Generate user ID
+    user_id = str(uuid.uuid4())
 
-    try:
-        user_attributes = {
-            "email": faculty.email,
-            "password": password,
-            "email_confirm": True,
-            "user_metadata": {
-                "full_name": faculty.faculty_name,
-                "role": "FACULTY",
-                "designation": faculty.designation or "",
-            },
-        }
-        auth_response = supabase.auth.admin.create_user(user_attributes)
-        user_id = auth_response.user.id
-    except Exception as auth_error:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to create user account: {str(auth_error)}",
-        ) from auth_error
-
+    # Create user profile with hashed password (NO Supabase Auth)
     try:
         profile_data = {
-            "id": user_id,
+            "user_id": user_id,
             "email": faculty.email,
-            "full_name": faculty.faculty_name,
-            "role": "FACULTY",
+            "name": faculty.faculty_name,
+            "phone": faculty.phone,
+            "role": faculty.role.value,
+            "department_id": faculty.department_id,
+            "password_hash": password_hash,
             "is_active": True,
+            "is_hod": faculty.role.value == "HOD",
+            "is_coordinator": faculty.role.value == "COORDINATOR",
         }
-        supabase.table("user_profiles").upsert(profile_data).execute()
+        supabase.table("user_profiles").insert(profile_data).execute()
+        print(f"[FACULTY] User profile created for {faculty.email} with user_id: {user_id}")
     except Exception as profile_error:
-        print(f"Profile creation warning: {profile_error}")
+        print(f"[FACULTY ERROR] Failed to create user profile: {profile_error}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create user profile: {str(profile_error)}",
+        )
 
-    faculty_data = faculty.model_dump()
-    response = supabase.table("faculty").insert(faculty_data).execute()
+    # Create faculty record
+    try:
+        faculty_data = faculty.model_dump()
+        response = supabase.table("faculty").insert(faculty_data).execute()
+        print(f"[FACULTY] Faculty record created for {faculty.faculty_code}")
+    except Exception as faculty_error:
+        # Rollback: delete user profile if faculty creation fails
+        try:
+            supabase.table("user_profiles").delete().eq("user_id", user_id).execute()
+            print(f"[FACULTY] Rolled back user profile for {user_id}")
+        except:
+            pass
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create faculty record: {str(faculty_error)}",
+        )
 
+    # Send credentials email
     message = "Faculty created successfully"
     if faculty.email and faculty.email.endswith("@noemail.local"):
         email_sent = False

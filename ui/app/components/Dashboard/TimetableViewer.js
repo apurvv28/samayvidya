@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Search, RefreshCw, Eye, X, FileDown, Pencil, Save } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Eye, X, FileDown, Pencil, Save, Check } from 'lucide-react';
 
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -115,8 +115,19 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     wef_date: '',
     to_date: '',
   });
+  const [approvingTimetable, setApprovingTimetable] = useState(false);
+  const [rejectingTimetable, setRejectingTimetable] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [extendingTimetable, setExtendingTimetable] = useState(false);
+  const [newToDate, setNewToDate] = useState('');
 
   const canEditTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
+  const canVerifyTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
+  const canApproveTimetable = canManageTimetable && ['HOD', 'ADMIN'].includes(profile?.role);
+  const canDeleteTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
+  const canExtendTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
 
   const sortedDays = useMemo(() => {
     const source = days.length ? days : FALLBACK_DAYS;
@@ -612,6 +623,189 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     }
   };
 
+  const handleVerifyTimetable = async () => {
+    if (!versionId) return;
+    
+    try {
+      setApprovingTimetable(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to verify timetable.');
+      }
+
+      setVersionMeta((prev) => ({ ...(prev || {}), approval_status: 'COORDINATOR_VERIFIED' }));
+      showToast('Timetable verified and forwarded to HOD.', 'success');
+      await fetchTimetableData(versionId);
+    } catch (error) {
+      console.error('Verify timetable error:', error);
+      showToast(error.message || 'Failed to verify timetable.', 'error');
+    } finally {
+      setApprovingTimetable(false);
+    }
+  };
+
+  const handleApproveTimetable = async () => {
+    if (!versionId) return;
+    
+    try {
+      setApprovingTimetable(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to approve timetable.');
+      }
+
+      setVersionMeta((prev) => ({ ...(prev || {}), approval_status: 'HOD_APPROVED', is_active: true }));
+      showToast('Timetable approved successfully.', 'success');
+      await fetchTimetableData(versionId);
+    } catch (error) {
+      console.error('Approve timetable error:', error);
+      showToast(error.message || 'Failed to approve timetable.', 'error');
+    } finally {
+      setApprovingTimetable(false);
+    }
+  };
+
+  const handleRejectTimetable = async () => {
+    if (!versionId) return;
+    
+    try {
+      setRejectingTimetable(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ rejection_reason: rejectionReason || 'No reason provided' }),
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to reject timetable.');
+      }
+
+      setVersionMeta((prev) => ({ ...(prev || {}), approval_status: 'REJECTED', is_active: false }));
+      setShowRejectModal(false);
+      setRejectionReason('');
+      showToast('Timetable rejected.', 'success');
+      await fetchTimetableData(versionId);
+    } catch (error) {
+      console.error('Reject timetable error:', error);
+      showToast(error.message || 'Failed to reject timetable.', 'error');
+    } finally {
+      setRejectingTimetable(false);
+    }
+  };
+
+  const handleDeleteTimetable = async () => {
+    if (!versionId) return;
+    
+    if (!confirm('Are you sure you want to delete this timetable version? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to delete timetable.');
+      }
+
+      showToast('Timetable deleted successfully.', 'success');
+      if (onVersionChange) {
+        onVersionChange(null);
+      }
+    } catch (error) {
+      console.error('Delete timetable error:', error);
+      showToast(error.message || 'Failed to delete timetable.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExtendTimetable = async () => {
+    if (!versionId || !newToDate) return;
+    
+    try {
+      setExtendingTimetable(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}/extend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ new_to_date: newToDate }),
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to extend timetable.');
+      }
+
+      setVersionMeta((prev) => ({ ...(prev || {}), to_date: newToDate, extension_requested: true }));
+      setShowExtendModal(false);
+      setNewToDate('');
+      showToast(`Timetable validity extended to ${newToDate}`, 'success');
+      await fetchTimetableData(versionId);
+    } catch (error) {
+      console.error('Extend timetable error:', error);
+      showToast(error.message || 'Failed to extend timetable.', 'error');
+    } finally {
+      setExtendingTimetable(false);
+    }
+  };
+
+  const getApprovalStatusBadge = () => {
+    const status = versionMeta?.approval_status || 'DRAFT';
+    const isFrozen = versionMeta?.is_frozen || false;
+    
+    const badges = {
+      'DRAFT': { label: 'Draft', className: 'bg-gray-500/20 text-gray-300 border-gray-500/40' },
+      'COORDINATOR_VERIFIED': { label: 'Verified', className: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
+      'HOD_APPROVED': { 
+        label: isFrozen ? '🔒 Approved & Frozen' : 'Approved', 
+        className: 'bg-green-500/20 text-green-300 border-green-500/40' 
+      },
+      'REJECTED': { label: 'Rejected', className: 'bg-red-500/20 text-red-300 border-red-500/40' },
+    };
+    
+    const badge = badges[status] || badges['DRAFT'];
+    
+    return (
+      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${badge.className}`}>
+        {badge.label}
+      </span>
+    );
+  };
+
   const renderCardList = (title, sectionKey, cards) => (
     <div className="rounded-2xl border border-white/10 bg-gray-900/60 p-4 min-h-96 flex flex-col">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -661,6 +855,102 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
 
       <div className="p-6 md:p-8 space-y-5">
         <div className="rounded-2xl border border-white/10 bg-gray-900/70 p-4 md:p-5">
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-white">Timetable Status</h2>
+              {getApprovalStatusBadge()}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Coordinator: Verify button (DRAFT status only) */}
+              {canVerifyTimetable && versionMeta?.approval_status === 'DRAFT' && (
+                <button
+                  type="button"
+                  disabled={approvingTimetable || loading}
+                  onClick={handleVerifyTimetable}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-400/40 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-200 hover:bg-blue-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {approvingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Verify & Forward to HOD
+                </button>
+              )}
+              
+              {/* HOD: Approve button (COORDINATOR_VERIFIED status only) */}
+              {canApproveTimetable && versionMeta?.approval_status === 'COORDINATOR_VERIFIED' && (
+                <>
+                  <button
+                    type="button"
+                    disabled={approvingTimetable || loading}
+                    onClick={handleApproveTimetable}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-green-400/40 bg-green-500/10 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {approvingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Approve Timetable
+                  </button>
+                  <button
+                    type="button"
+                    disabled={rejectingTimetable || loading}
+                    onClick={() => setShowRejectModal(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    Reject
+                  </button>
+                </>
+              )}
+              
+              {/* Coordinator: Delete button (DRAFT or REJECTED status only) */}
+              {canDeleteTimetable && (versionMeta?.approval_status === 'DRAFT' || versionMeta?.approval_status === 'REJECTED') && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={handleDeleteTimetable}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <X className="w-4 h-4" />
+                  Delete Timetable
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Show rejection reason if rejected */}
+          {versionMeta?.approval_status === 'REJECTED' && versionMeta?.rejection_reason && (
+            <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-sm font-semibold text-red-300 mb-1">Rejection Reason:</p>
+              <p className="text-xs text-red-200">{versionMeta.rejection_reason}</p>
+            </div>
+          )}
+          
+          {/* Show approval info if approved */}
+          {versionMeta?.approval_status === 'HOD_APPROVED' && (
+            <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+              <p className="text-sm font-semibold text-green-300">
+                {versionMeta?.is_frozen ? '🔒 This timetable has been approved and frozen' : '✓ This timetable has been approved and is now active'}
+              </p>
+              {versionMeta?.approved_at && (
+                <p className="text-xs text-green-200 mt-1">
+                  Approved on: {new Date(versionMeta.approved_at).toLocaleString()}
+                </p>
+              )}
+              {versionMeta?.is_frozen && versionMeta?.wef_date && versionMeta?.to_date && (
+                <p className="text-xs text-green-200 mt-1">
+                  Valid from {versionMeta.wef_date} to {versionMeta.to_date}
+                </p>
+              )}
+              {canExtendTimetable && versionMeta?.is_frozen && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewToDate(versionMeta?.to_date || '');
+                    setShowExtendModal(true);
+                  }}
+                  className="mt-2 inline-flex items-center gap-2 rounded-lg border border-yellow-400/40 bg-yellow-500/10 px-3 py-1.5 text-xs font-semibold text-yellow-200 hover:bg-yellow-500/20"
+                >
+                  Extend Validity Period
+                </button>
+              )}
+            </div>
+          )}
+          
           <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
             <div className="flex-1 relative">
               <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -992,6 +1282,112 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
           </div>
         </div>
       ) : null}
+      
+      {/* Rejection Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/25 bg-gray-900 shadow-2xl">
+            <div className="px-6 py-4 border-b border-red-500/20">
+              <h3 className="text-lg font-semibold text-white">Reject Timetable</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Rejection Reason
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Please provide a reason for rejection..."
+                  rows={4}
+                  className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setRejectionReason('');
+                  }}
+                  className="px-4 py-2 rounded-lg border border-white/20 bg-gray-800 text-sm font-semibold text-gray-200 hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={rejectingTimetable || !rejectionReason.trim()}
+                  onClick={handleRejectTimetable}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-400/40 bg-red-500/10 text-sm font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {rejectingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Reject Timetable
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Extend Validity Modal */}
+      {showExtendModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-yellow-500/25 bg-gray-900 shadow-2xl">
+            <div className="px-6 py-4 border-b border-yellow-500/20">
+              <h3 className="text-lg font-semibold text-white">Extend Timetable Validity</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Current End Date
+                </label>
+                <input
+                  type="text"
+                  value={versionMeta?.to_date || 'Not set'}
+                  disabled
+                  className="w-full rounded-lg border border-white/10 bg-gray-800/50 px-3 py-2 text-sm text-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  New End Date
+                </label>
+                <input
+                  type="date"
+                  value={newToDate}
+                  onChange={(e) => setNewToDate(e.target.value)}
+                  min={versionMeta?.to_date || ''}
+                  className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500/30"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  New date must be after the current end date
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExtendModal(false);
+                    setNewToDate('');
+                  }}
+                  className="px-4 py-2 rounded-lg border border-white/20 bg-gray-800 text-sm font-semibold text-gray-200 hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={extendingTimetable || !newToDate}
+                  onClick={handleExtendTimetable}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-400/40 bg-yellow-500/10 text-sm font-semibold text-yellow-200 hover:bg-yellow-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {extendingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Extend Validity
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
