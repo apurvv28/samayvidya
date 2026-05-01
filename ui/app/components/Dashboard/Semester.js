@@ -179,7 +179,7 @@ export default function Semester() {
         <select 
           value={year}
           onChange={(e) => setYear(e.target.value)}
-          className="bg-white border-2 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2.5"
+          className="bg-white border-2 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 block p-2.5"
         >
           <option value="SY">Second Year (SY)</option>
           <option value="TY">Third Year (TY)</option>
@@ -188,7 +188,7 @@ export default function Semester() {
         
         <button 
           onClick={openModal}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg whitespace-nowrap"
+          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg whitespace-nowrap"
         >
           <Plus className="w-4 h-4" />
           Add Subject
@@ -198,7 +198,7 @@ export default function Semester() {
       {/* Subject Table */}
       {loading ? (
         <div className="flex items-center justify-center h-40">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
         </div>
       ) : (
         <div className="bg-white rounded-xl border-2 border-gray-100 overflow-hidden">
@@ -222,12 +222,12 @@ export default function Semester() {
                     animate={{ opacity: 1 }}
                     className="text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <td className="px-6 py-4 font-mono text-blue-600">{sub.subject_id}</td>
+                    <td className="px-6 py-4 font-mono text-teal-600">{sub.subject_id}</td>
                     <td className="px-6 py-4 font-medium text-gray-900">{sub.subject_name}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded text-xs border ${
                         sub.subject_type === 'LAB' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
-                        sub.subject_type === 'THEORY' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                        sub.subject_type === 'THEORY' ? 'bg-teal-50 text-teal-700 border-teal-200' : 
                         'bg-gray-100 text-gray-700 border-gray-200'
                       }`}>
                         {sub.subject_type}
@@ -287,7 +287,7 @@ export default function Semester() {
                                 <input 
                                     type="text" 
                                     required
-                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                     placeholder="e.g. Data Structures"
                                     value={formData.subject_name}
                                     onChange={e => setFormData({...formData, subject_name: e.target.value})}
@@ -298,7 +298,7 @@ export default function Semester() {
                                 <input 
                                     type="text" 
                                     required
-                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-mono"
                                     placeholder="e.g. CS2001"
                                     value={formData.subject_id}
                                     onChange={e => setFormData({...formData, subject_id: e.target.value})}
@@ -310,7 +310,7 @@ export default function Semester() {
                              <div className="space-y-2">
                                 <label className="text-xs font-semibold text-gray-600 uppercase">Type</label>
                                 <select 
-                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                     value={formData.subject_type}
                                     onChange={e => setFormData({...formData, subject_type: e.target.value})}
                                 >
@@ -324,7 +324,7 @@ export default function Semester() {
                                 <input 
                                     type="number" 
                                     min="0"
-                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                     value={formData.credits}
                                     onChange={e => setFormData({...formData, credits: e.target.value === '' ? '' : parseInt(e.target.value)})}
                                 />
@@ -334,7 +334,7 @@ export default function Semester() {
                                 <input 
                                     type="number" 
                                     min="0"
-                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                     value={formData.hours_per_week}
                                     onChange={e => setFormData({...formData, hours_per_week: e.target.value === '' ? '' : parseInt(e.target.value)})}
                                 />
@@ -344,7 +344,7 @@ export default function Semester() {
                         <div className="space-y-2">
                             <label className="text-xs font-semibold text-gray-600 uppercase">Department</label>
                             <select 
-                                className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full bg-white border-2 border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                 value={formData.department_id}
                                 onChange={e => setFormData({...formData, department_id: e.target.value})}
                                 required
@@ -365,7 +365,7 @@ export default function Semester() {
                                 <label className="text-xs text-gray-600">Theory Hours</label>
                                 <input 
                                     type="number" min="0"
-                                    className="w-full bg-white border-2 border-gray-300 rounded p-2 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded p-2 text-gray-900 text-sm focus:ring-2 focus:ring-teal-500"
                                     value={formData.theory_hours}
                                     onChange={e => setFormData({...formData, theory_hours: e.target.value === '' ? '' : parseInt(e.target.value)})}
                                 />
@@ -374,7 +374,7 @@ export default function Semester() {
                                 <label className="text-xs text-gray-600">Lab Hours</label>
                                 <input 
                                     type="number" min="0"
-                                    className="w-full bg-white border-2 border-gray-300 rounded p-2 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded p-2 text-gray-900 text-sm focus:ring-2 focus:ring-teal-500"
                                     value={formData.lab_hours}
                                     onChange={e => setFormData({...formData, lab_hours: e.target.value === '' ? '' : parseInt(e.target.value)})}
                                 />
@@ -383,7 +383,7 @@ export default function Semester() {
                                 <label className="text-xs text-gray-600">Tutorial Hours</label>
                                 <input 
                                     type="number" min="0"
-                                    className="w-full bg-white border-2 border-gray-300 rounded p-2 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500"
+                                    className="w-full bg-white border-2 border-gray-300 rounded p-2 text-gray-900 text-sm focus:ring-2 focus:ring-teal-500"
                                     value={formData.tutorial_hours}
                                     onChange={e => setFormData({...formData, tutorial_hours: e.target.value === '' ? '' : parseInt(e.target.value)})}
                                 />
@@ -407,7 +407,7 @@ export default function Semester() {
                                             is_lab_online: false,
                                             is_tutorial_online: false
                                         })}
-                                        className="text-blue-600 focus:ring-blue-500 bg-white border-gray-300"
+                                        className="text-teal-600 focus:ring-teal-500 bg-white border-gray-300"
                                     />
                                     <span className="text-sm text-gray-700">Offline</span>
                                 </label>
@@ -424,7 +424,7 @@ export default function Semester() {
                                             is_lab_online: true,
                                             is_tutorial_online: true
                                         })}
-                                        className="text-blue-600 focus:ring-blue-500 bg-white border-gray-300"
+                                        className="text-teal-600 focus:ring-teal-500 bg-white border-gray-300"
                                     />
                                     <span className="text-sm text-gray-700">Online</span>
                                 </label>
@@ -435,7 +435,7 @@ export default function Semester() {
                                         value="PARTIAL"
                                         checked={formData.delivery_mode === 'PARTIAL'}
                                         onChange={e => setFormData({...formData, delivery_mode: e.target.value})}
-                                        className="text-blue-600 focus:ring-blue-500 bg-white border-gray-300"
+                                        className="text-teal-600 focus:ring-teal-500 bg-white border-gray-300"
                                     />
                                     <span className="text-sm text-gray-700">Partially Online</span>
                                 </label>
@@ -452,7 +452,7 @@ export default function Semester() {
                                             type="checkbox"
                                             checked={formData.is_theory_online}
                                             onChange={e => setFormData({...formData, is_theory_online: e.target.checked})}
-                                            className="rounded bg-white border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            className="rounded bg-white border-gray-300 text-teal-600 focus:ring-teal-500"
                                         />
                                         <span className="text-xs text-gray-700">Theory Online</span>
                                     </label>
@@ -461,7 +461,7 @@ export default function Semester() {
                                             type="checkbox"
                                             checked={formData.is_lab_online}
                                             onChange={e => setFormData({...formData, is_lab_online: e.target.checked})}
-                                            className="rounded bg-white border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            className="rounded bg-white border-gray-300 text-teal-600 focus:ring-teal-500"
                                         />
                                         <span className="text-xs text-gray-700">Lab Online</span>
                                     </label>
@@ -470,7 +470,7 @@ export default function Semester() {
                                             type="checkbox"
                                             checked={formData.is_tutorial_online}
                                             onChange={e => setFormData({...formData, is_tutorial_online: e.target.checked})}
-                                            className="rounded bg-white border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            className="rounded bg-white border-gray-300 text-teal-600 focus:ring-teal-500"
                                         />
                                         <span className="text-xs text-gray-700">Tutorial Online</span>
                                     </label>
@@ -482,7 +482,7 @@ export default function Semester() {
                             <input 
                                 type="checkbox" 
                                 id="continuity"
-                                className="w-4 h-4 rounded bg-white border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="w-4 h-4 rounded bg-white border-gray-300 text-teal-600 focus:ring-teal-500"
                                 checked={formData.requires_continuity}
                                 onChange={e => setFormData({...formData, requires_continuity: e.target.checked})}
                             />
@@ -500,7 +500,7 @@ export default function Semester() {
                             <button 
                                 type="submit" 
                                 disabled={submitting}
-                                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                                 Save Subject

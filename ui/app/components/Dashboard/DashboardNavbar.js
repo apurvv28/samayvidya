@@ -76,7 +76,7 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab, showNav
               </span>
               <span className="text-xs text-gray-500 font-medium">Academic Timetable Framework</span>
             </Link>
-            <span className="px-2 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs text-blue-700 font-semibold capitalize">
+            <span className="px-2 py-1 rounded-full bg-teal-50 border border-teal-100 text-xs text-teal-700 font-semibold capitalize">
               {role}
             </span>
           </div>

@@ -138,7 +138,7 @@ export default function ManageResources() {
     <div className="p-6 space-y-8 bg-white border-2 border-gray-100 rounded-2xl">
       {loading ? (
           <div className="flex justify-center items-center h-64">
-              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+              <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
           </div>
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -146,12 +146,12 @@ export default function ManageResources() {
         <div className="bg-white border-2 border-gray-100 rounded-xl overflow-hidden">
             <div className="p-4 border-b-2 border-gray-200 flex justify-between items-center bg-gray-50">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-blue-600" />
+                    <GraduationCap className="w-4 h-4 text-teal-600" />
                     Classrooms
                 </h3>
                 <button 
                     onClick={() => openAddModal('CLASSROOM')}
-                    className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border-2 border-blue-200 font-medium"
+                    className="text-xs bg-teal-50 text-teal-600 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border-2 border-teal-200 font-medium"
                 >
                     <Plus className="w-3 h-3" /> Add Classroom
                 </button>
@@ -173,7 +173,7 @@ export default function ManageResources() {
                         )}
                         {classrooms.map(cr => (
                             <tr key={cr.room_id} className="group hover:bg-gray-50">
-                                <td className="py-3 text-gray-900 group-hover:text-blue-600 font-medium">{cr.room_number}</td>
+                                <td className="py-3 text-gray-900 group-hover:text-teal-600 font-medium">{cr.room_number}</td>
                                 <td className="py-3 text-gray-600">{cr.capacity}</td>
                                 <td className="py-3 text-right">
                                     <button 
@@ -248,7 +248,7 @@ export default function ManageResources() {
               <div className="bg-white border-2 border-gray-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
                   <div className="flex justify-between items-center p-6 border-b-2 border-gray-200 bg-gray-50">
                       <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                          {resourceType === 'CLASSROOM' ? <GraduationCap className="w-5 h-5 text-blue-600" /> : <Monitor className="w-5 h-5 text-purple-600" />}
+                          {resourceType === 'CLASSROOM' ? <GraduationCap className="w-5 h-5 text-teal-600" /> : <Monitor className="w-5 h-5 text-purple-600" />}
                           Add New {resourceType === 'CLASSROOM' ? 'Classroom' : 'Laboratory'}
                       </h3>
                       <button 
@@ -267,7 +267,7 @@ export default function ManageResources() {
                           <input 
                               type="text" 
                               required
-                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                               placeholder={resourceType === 'CLASSROOM' ? 'e.g. CR-101' : 'e.g. LAB-1'}
                               value={newRoom.room_number}
                               onChange={(e) => setNewRoom({...newRoom, room_number: e.target.value})}
@@ -280,7 +280,7 @@ export default function ManageResources() {
                               type="number" 
                               required
                               min="1"
-                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                               value={newRoom.capacity}
                               onChange={(e) => setNewRoom({...newRoom, capacity: parseInt(e.target.value)})}
                           />
@@ -289,7 +289,7 @@ export default function ManageResources() {
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                           <select 
-                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors appearance-none"
+                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors appearance-none"
                               value={newRoom.department_id}
                               onChange={(e) => setNewRoom({...newRoom, department_id: e.target.value})}
                               required
@@ -311,7 +311,7 @@ export default function ManageResources() {
                           <button 
                               type="submit"
                               disabled={submitting}
-                              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                              className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                           >
                                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                                Save {resourceType === 'CLASSROOM' ? 'Room' : 'Lab'}

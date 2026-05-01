@@ -48,8 +48,8 @@ export default function DivisionStudents({ divisionId, divisionName, onClose }) 
         <div className="bg-white border-2 border-gray-100 rounded-2xl w-full max-w-6xl shadow-2xl overflow-hidden">
           <div className="flex justify-between items-center p-6 border-b-2 border-gray-100 bg-gray-50 sticky top-0 z-10">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border-2 border-blue-100">
-                <Users className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center border-2 border-teal-100">
+                <Users className="w-5 h-5 text-teal-600" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Students in {divisionName}</h3>
@@ -69,7 +69,7 @@ export default function DivisionStudents({ divisionId, divisionName, onClose }) 
           <div className="p-6">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
               </div>
             ) : students.length === 0 ? (
               <div className="text-center py-12">
@@ -123,7 +123,7 @@ export default function DivisionStudents({ divisionId, divisionName, onClose }) 
                           {student.prn_number}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold border-2 border-blue-100">
+                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded text-xs font-semibold border-2 border-teal-100">
                             {student.batches?.batch_code || 'N/A'}
                           </span>
                         </td>

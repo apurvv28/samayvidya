@@ -15,8 +15,8 @@ const toastTypes = {
   },
   info: {
     icon: Info,
-    className: 'bg-blue-50 text-blue-800 border-blue-200',
-    iconClass: 'text-blue-500'
+    className: 'bg-teal-50 text-teal-800 border-teal-200',
+    iconClass: 'text-teal-500'
   }
 };
 

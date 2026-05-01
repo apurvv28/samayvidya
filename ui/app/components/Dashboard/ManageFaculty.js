@@ -227,10 +227,10 @@ export default function ManageFaculty() {
   const renderTable = (rows, columns, editable) => (
     <div className="max-h-[65vh] overflow-auto rounded-lg border-2 border-gray-200">
       <table className="min-w-full text-sm text-gray-900">
-        <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
+        <thead className="bg-gradient-to-r from-teal-600 to-teal-700 sticky top-0 z-10">
           <tr>
             {columns.map((column) => (
-              <th key={column} className="text-left px-4 py-3 border-b-2 border-blue-800 whitespace-nowrap font-medium text-white">
+              <th key={column} className="text-left px-4 py-3 border-b-2 border-teal-800 whitespace-nowrap font-medium text-white">
                 {column}
               </th>
             ))}
@@ -246,7 +246,7 @@ export default function ManageFaculty() {
                       type="text"
                       value={row[column] || ''}
                       onChange={(e) => handlePreviewCellChange(rowIndex, column, e.target.value)}
-                      className="w-full min-w-35 bg-white border-2 border-gray-300 rounded px-2 py-1 text-gray-900 focus:border-blue-600 focus:outline-none"
+                      className="w-full min-w-35 bg-white border-2 border-gray-300 rounded px-2 py-1 text-gray-900 focus:border-teal-600 focus:outline-none"
                     />
                   ) : (
                     row[column] ?? '-'
@@ -280,7 +280,7 @@ export default function ManageFaculty() {
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
         </div>
       ) : (
         <div className="bg-white border-2 border-gray-100 rounded-2xl p-6 space-y-5">
@@ -343,7 +343,7 @@ export default function ManageFaculty() {
                   type="button"
                   onClick={handleSubmitLoadDistribution}
                   disabled={submitting || isEditingPreview}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   {submitting ? 'Submitting...' : 'Submit To Database'}
@@ -427,9 +427,9 @@ export default function ManageFaculty() {
                 )}
               </div>
 
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 text-sm text-gray-700 space-y-2">
+              <div className="bg-teal-50 border-2 border-teal-200 rounded-lg p-4 text-sm text-gray-700 space-y-2">
                 <div className="flex items-start gap-2">
-                  <FileText className="w-4 h-4 mt-0.5 text-blue-600 shrink-0" />
+                  <FileText className="w-4 h-4 mt-0.5 text-teal-600 shrink-0" />
                   <p>
                     Required columns: <span className="text-gray-900 font-medium">Faculty Name, Year, Division, Subject, Theory Hrs, Lab Hrs, Tutorial Hrs</span>.
                   </p>

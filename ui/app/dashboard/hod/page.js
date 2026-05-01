@@ -252,10 +252,10 @@ export default function HODDashboard() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 border-2 border-blue-100 rounded-xl p-6 space-y-3">
+              <div className="bg-teal-50 border-2 border-teal-100 rounded-xl p-6 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-600">Approved Timetables</h3>
-                  <CheckCircle2 className="w-5 h-5 text-blue-600" />
+                  <CheckCircle2 className="w-5 h-5 text-teal-600" />
                 </div>
                 <p className="text-3xl font-bold text-gray-900">{stats.approvedTimetables}</p>
               </div>
@@ -288,7 +288,7 @@ export default function HODDashboard() {
             {/* Recent Timetables */}
             <div className="bg-white border-2 border-gray-100 rounded-xl p-6 space-y-4">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-blue-600" />
+                <Calendar className="w-5 h-5 text-teal-600" />
                 Recent Timetables
               </h2>
               
@@ -304,7 +304,7 @@ export default function HODDashboard() {
                           Created {new Date(version.created_at).toLocaleDateString()}
                         </p>
                       </div>
-                      <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium border border-blue-200">
+                      <span className="px-3 py-1 bg-teal-50 text-teal-700 rounded-full text-sm font-medium border border-teal-200">
                         {version.status || 'draft'}
                       </span>
                     </div>
@@ -319,7 +319,7 @@ export default function HODDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
                   onClick={() => setActiveTab('leaves')}
-                  className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                  className="p-4 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all transform hover:scale-105 flex items-center justify-center gap-2"
                 >
                   <FileText className="w-5 h-5" />
                   Review Leave Requests ({pendingLeaves.length} pending)
@@ -353,8 +353,8 @@ export default function HODDashboard() {
             {/* Leave Management Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-200">
-                  <FileText className="w-6 h-6 text-blue-600" />
+                <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center border border-teal-200">
+                  <FileText className="w-6 h-6 text-teal-600" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Faculty Leave Management</h2>
@@ -364,7 +364,7 @@ export default function HODDashboard() {
               <button
                 onClick={fetchAllLeaves}
                 disabled={loadingLeaves}
-                className="px-4 py-2 text-sm font-semibold text-blue-700 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm font-semibold text-teal-700 border-2 border-teal-200 rounded-lg hover:bg-teal-50 transition-colors disabled:opacity-50"
               >
                 Refresh
               </button>
@@ -525,8 +525,8 @@ export default function HODDashboard() {
             {/* Analytics Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-200">
-                  <BarChart3 className="w-6 h-6 text-blue-600" />
+                <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center border border-teal-200">
+                  <BarChart3 className="w-6 h-6 text-teal-600" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Department Analytics</h2>
@@ -536,7 +536,7 @@ export default function HODDashboard() {
               <button
                 onClick={fetchAnalytics}
                 disabled={loadingAnalytics}
-                className="px-4 py-2 text-sm font-semibold text-blue-700 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm font-semibold text-teal-700 border-2 border-teal-200 rounded-lg hover:bg-teal-50 transition-colors disabled:opacity-50"
               >
                 {loadingAnalytics ? 'Loading...' : 'Refresh'}
               </button>
@@ -553,7 +553,7 @@ export default function HODDashboard() {
                 {analytics.leaveStats && (
                   <div className="bg-white border-2 border-gray-100 rounded-xl p-6 space-y-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-blue-600" />
+                      <Calendar className="w-5 h-5 text-teal-600" />
                       Leave Statistics
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -631,7 +631,7 @@ export default function HODDashboard() {
                 {/* Room Utilization */}
                 <div className="bg-white border-2 border-gray-100 rounded-xl p-6 space-y-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                    <BarChart3 className="w-5 h-5 text-teal-600" />
                     Room Utilization
                   </h3>
                   {analytics.roomUtilization.length === 0 ? (

@@ -199,7 +199,7 @@ export default function AddFaculty() {
         
         {/* Debug Info - Remove after testing */}
         {loadingDepartment ? (
-          <div className="mt-3 text-xs text-blue-400 bg-blue-900/20 border border-blue-500/20 rounded-lg px-3 py-2 inline-flex items-center gap-2">
+          <div className="mt-3 text-xs text-teal-400 bg-teal-900/20 border border-teal-500/20 rounded-lg px-3 py-2 inline-flex items-center gap-2">
             <Loader2 className="w-3 h-3 animate-spin" />
             Loading department information...
           </div>

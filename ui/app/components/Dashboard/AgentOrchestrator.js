@@ -265,7 +265,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             type="button"
             onClick={() => fetchReadiness(planInput.department_id)}
             disabled={loadingReadiness}
-            className="inline-flex items-center gap-2 rounded-lg border-2 border-blue-600 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-teal-600 px-3 py-2 text-xs font-semibold text-teal-600 hover:bg-teal-50 disabled:opacity-50 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingReadiness ? 'animate-spin' : ''}`} />
             Refresh from Supabase
@@ -276,7 +276,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
           <div>
             <label className="block text-xs text-gray-600 mb-1 font-medium">Department</label>
             <select
-              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
               value={planInput.department_id}
               onChange={async (event) => {
                 const nextDepartmentId = event.target.value;
@@ -300,7 +300,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             <label className="block text-xs text-gray-600 mb-1 font-medium">Academic Year</label>
             <input
               type="text"
-              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
               value={planInput.academic_year}
               onChange={(event) => setPlanInput((prev) => ({ ...prev, academic_year: event.target.value }))}
             />
@@ -309,7 +309,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             <label className="block text-xs text-gray-600 mb-1 font-medium">Semester</label>
             <input
               type="text"
-              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
               value={planInput.semester}
               onChange={(event) => setPlanInput((prev) => ({ ...prev, semester: event.target.value }))}
             />
@@ -318,7 +318,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             <label className="block text-xs text-gray-600 mb-1 font-medium">Program</label>
             <input
               type="text"
-              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+              className="w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
               value={planInput.program}
               onChange={(event) => setPlanInput((prev) => ({ ...prev, program: event.target.value }))}
             />
@@ -328,13 +328,13 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                className="w-full rounded-lg border-2 border-gray-300 bg-white px-2 py-2 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                className="w-full rounded-lg border-2 border-gray-300 bg-white px-2 py-2 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                 value={planInput.effective_from}
                 onChange={(event) => setPlanInput((prev) => ({ ...prev, effective_from: event.target.value }))}
               />
               <input
                 type="date"
-                className="w-full rounded-lg border-2 border-gray-300 bg-white px-2 py-2 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                className="w-full rounded-lg border-2 border-gray-300 bg-white px-2 py-2 text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                 value={planInput.effective_to}
                 onChange={(event) => setPlanInput((prev) => ({ ...prev, effective_to: event.target.value }))}
               />
@@ -353,13 +353,13 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
                 return (
                   <label
                     key={division.division_id}
-                    className="flex items-center gap-2 rounded border-2 border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-900 hover:border-blue-300 transition-colors cursor-pointer"
+                    className="flex items-center gap-2 rounded border-2 border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-900 hover:border-teal-300 transition-colors cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleDivisionSelection(division.division_id)}
-                      className="accent-blue-600"
+                      className="accent-teal-600"
                     />
                     {division.label}
                   </label>
@@ -400,12 +400,12 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
         )}
       </div>
 
-      <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-50 p-6">
+      <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-br from-teal-50 via-white to-teal-50 p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.2em] text-blue-600 font-semibold">Agent Orchestration</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-teal-600 font-semibold">Agent Orchestration</p>
             <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Times New Roman', serif" }}>
-              <BrainCircuit className="w-6 h-6 text-blue-600" />
+              <BrainCircuit className="w-6 h-6 text-teal-600" />
               Multi-Agent Timetable Creator
             </h2>
             <p className="text-sm text-gray-700 max-w-2xl">
@@ -417,7 +417,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
             type="button"
             onClick={handleCreateTimetable}
             disabled={running || loadingReadiness || (readiness?.blocking_issues || []).length > 0}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
           >
             {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             {running ? 'Orchestrating...' : 'Create Timetable'}
@@ -432,11 +432,11 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
           const hasData = Boolean(stage);
 
           return (
-            <div key={stageName} className="rounded-xl border-2 border-gray-100 bg-white p-4 space-y-3 hover:border-blue-200 transition-colors">
+            <div key={stageName} className="rounded-xl border-2 border-gray-100 bg-white p-4 space-y-3 hover:border-teal-200 transition-colors">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-sm font-medium text-gray-900 leading-snug">{stageName}</h3>
                 {running && !hasData ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
                 ) : completed ? (
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
                 ) : (
@@ -470,7 +470,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div className="rounded-lg bg-blue-50 border-2 border-blue-200 p-3">
+              <div className="rounded-lg bg-teal-50 border-2 border-teal-200 p-3">
                 <p className="text-gray-600 font-medium">Run ID</p>
                 <p className="font-mono text-gray-900 break-all text-xs">{result.run_id}</p>
               </div>
@@ -491,7 +491,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
                 <button
                   type="button"
                   onClick={onViewTimetable}
-                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors"
                 >
                   Open This Version In Timetable Tab
                 </button>

@@ -128,7 +128,7 @@ export default function FacultyList() {
       case 'HOD':
         return 'bg-purple-600/20 text-purple-300 border-purple-500/30';
       case 'FACULTY':
-        return 'bg-blue-600/20 text-blue-300 border-blue-500/30';
+        return 'bg-teal-600/20 text-teal-300 border-teal-500/30';
       default:
         return 'bg-gray-600/20 text-gray-300 border-gray-500/30';
     }
@@ -255,7 +255,7 @@ export default function FacultyList() {
                     <p className="text-gray-500 text-xs mb-2">Target Loads:</p>
                     <div className="flex gap-2 flex-wrap text-xs">
                       {member.target_theory_load > 0 && (
-                        <span className="px-2 py-1 bg-blue-600/20 text-blue-300 rounded">
+                        <span className="px-2 py-1 bg-teal-600/20 text-teal-300 rounded">
                           Theory: {member.target_theory_load}
                         </span>
                       )}

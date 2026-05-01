@@ -76,7 +76,7 @@ export default function StudentDashboard() {
       case 'warning':
         return <Bell className="w-5 h-5 text-amber-600" />;
       default:
-        return <Bell className="w-5 h-5 text-blue-600" />;
+        return <Bell className="w-5 h-5 text-teal-600" />;
     }
   };
 
@@ -87,7 +87,7 @@ export default function StudentDashboard() {
       case 'warning':
         return 'bg-amber-50 border-amber-200';
       default:
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-teal-50 border-teal-200';
     }
   };
 
@@ -221,16 +221,16 @@ export default function StudentDashboard() {
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <div className="text-center">
-                    <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+                    <Loader2 className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4" />
                     <p className="text-gray-600">Loading your dashboard...</p>
                   </div>
                 </div>
               ) : studentInfo ? (
                 <>
-                  <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl px-6 py-4">
+                  <div className="mb-6 bg-gradient-to-r from-teal-50 to-indigo-50 border-2 border-teal-200 rounded-xl px-6 py-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
-                        <GraduationCap className="w-6 h-6 text-blue-600" />
+                      <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center border-2 border-teal-200">
+                        <GraduationCap className="w-6 h-6 text-teal-600" />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -271,8 +271,8 @@ export default function StudentDashboard() {
                     <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
-                            <Bell className="w-5 h-5 text-blue-600" />
+                          <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center border-2 border-teal-200">
+                            <Bell className="w-5 h-5 text-teal-600" />
                           </div>
                           <div>
                             <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
@@ -284,7 +284,7 @@ export default function StudentDashboard() {
                         {notifications.some((n) => !n.read) && (
                           <button
                             onClick={markAllAsRead}
-                            className="text-sm text-blue-600 hover:text-blue-700 transition-colors font-medium"
+                            className="text-sm text-teal-600 hover:text-teal-700 transition-colors font-medium"
                           >
                             Mark all as read
                           </button>
@@ -313,7 +313,7 @@ export default function StudentDashboard() {
                                     <h3 className={`font-semibold ${notif.read ? 'text-gray-600' : 'text-gray-900'}`}>
                                       {notif.title}
                                     </h3>
-                                    {!notif.read && <span className="shrink-0 w-2 h-2 bg-blue-600 rounded-full mt-2"></span>}
+                                    {!notif.read && <span className="shrink-0 w-2 h-2 bg-teal-600 rounded-full mt-2"></span>}
                                   </div>
                                   <p className={`text-sm mb-2 ${notif.read ? 'text-gray-500' : 'text-gray-700'}`}>
                                     {notif.message}
@@ -326,7 +326,7 @@ export default function StudentDashboard() {
                                     {!notif.read && (
                                       <button
                                         onClick={() => markAsRead(notif.id)}
-                                        className="text-xs text-blue-600 hover:text-blue-700 transition-colors font-medium"
+                                        className="text-xs text-teal-600 hover:text-teal-700 transition-colors font-medium"
                                       >
                                         Mark as read
                                       </button>

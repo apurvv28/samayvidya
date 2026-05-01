@@ -789,7 +789,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     
     const badges = {
       'DRAFT': { label: 'Draft', className: 'bg-gray-100 text-gray-700 border-gray-300' },
-      'COORDINATOR_VERIFIED': { label: 'Verified', className: 'bg-blue-100 text-blue-700 border-blue-300' },
+      'COORDINATOR_VERIFIED': { label: 'Verified', className: 'bg-teal-100 text-teal-700 border-teal-300' },
       'HOD_APPROVED': { 
         label: isFrozen ? '🔒 Approved & Frozen' : 'Approved', 
         className: 'bg-green-100 text-green-700 border-green-300' 
@@ -820,7 +820,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
             key={`${sectionKey}-${card.id}`}
             type="button"
             onClick={() => openModal(sectionKey, card.id)}
-            className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors"
+            className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-left hover:border-teal-300 hover:bg-teal-50 transition-colors"
           >
             <p className="text-sm font-semibold text-gray-900 truncate">{card.label}</p>
             <p className="text-xs text-gray-600 mt-1">{card.count} sessions</p>
@@ -867,7 +867,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="button"
                   disabled={approvingTimetable || loading}
                   onClick={handleVerifyTimetable}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-blue-600 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-teal-600 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {approvingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Verify & Forward to HOD
@@ -959,7 +959,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search division, room, or faculty timetable..."
-                className="w-full rounded-lg border-2 border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-blue-600 transition-colors"
+                className="w-full rounded-lg border-2 border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-teal-600 transition-colors"
               />
             </div>
             {canEditTimetable ? (
@@ -967,7 +967,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                 type="button"
                 disabled={regenerating || loading}
                 onClick={handleRegenerate}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-blue-600 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-teal-600 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                 Regenerate Timetable
@@ -983,7 +983,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="text"
                   value={metadataDraft.version_name}
                   onChange={(event) => setMetadataDraft((prev) => ({ ...prev, version_name: event.target.value }))}
-                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                   placeholder="V1"
                 />
               </label>
@@ -993,7 +993,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="text"
                   value={metadataDraft.academic_year}
                   onChange={(event) => setMetadataDraft((prev) => ({ ...prev, academic_year: event.target.value }))}
-                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                   placeholder="2025-26"
                 />
               </label>
@@ -1003,7 +1003,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="text"
                   value={metadataDraft.semester}
                   onChange={(event) => setMetadataDraft((prev) => ({ ...prev, semester: event.target.value }))}
-                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                   placeholder="2"
                 />
               </label>
@@ -1013,7 +1013,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="date"
                   value={metadataDraft.wef_date}
                   onChange={(event) => setMetadataDraft((prev) => ({ ...prev, wef_date: event.target.value }))}
-                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                 />
               </label>
               <label className="flex flex-col gap-1 rounded border-2 border-gray-200 bg-white p-2">
@@ -1022,7 +1022,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="date"
                   value={metadataDraft.to_date}
                   onChange={(event) => setMetadataDraft((prev) => ({ ...prev, to_date: event.target.value }))}
-                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
+                  className="rounded border-2 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none transition-colors"
                 />
               </label>
             </div>
@@ -1065,8 +1065,8 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         ) : showOnlyFacultyView ? (
           // Faculty view: Show their own timetable, divisions they teach, and room assignments
           <div className="space-y-4">
-            <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-50 p-4">
-              <h3 className="text-sm font-semibold text-blue-700 mb-2">Your Teaching Schedule</h3>
+            <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-br from-teal-50 via-white to-teal-50 p-4">
+              <h3 className="text-sm font-semibold text-teal-700 mb-2">Your Teaching Schedule</h3>
               <p className="text-xs text-gray-600">
                 View your complete weekly timetable, divisions you teach, and room assignments.
               </p>
@@ -1089,7 +1089,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       {modalState.open ? (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 md:p-8 overflow-auto">
           <div className="w-full max-w-7xl rounded-2xl border-2 border-gray-200 bg-white shadow-2xl print-target">
-            <div className="no-print px-4 md:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 via-white to-blue-50 flex flex-wrap items-center justify-between gap-3">
+            <div className="no-print px-4 md:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 via-white to-teal-50 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm md:text-base font-semibold text-gray-900 tracking-tight">{modalTitle}</h3>
               </div>
@@ -1098,7 +1098,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   type="button"
                   disabled={loading}
                   onClick={printModal}
-                  className="inline-flex items-center gap-2 rounded-lg border-2 border-blue-600 bg-gradient-to-r from-blue-600 to-blue-700 px-3.5 py-2 text-xs font-semibold text-white shadow-md hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 disabled:shadow-none transition-colors"
+                  className="inline-flex items-center gap-2 rounded-lg border-2 border-teal-600 bg-gradient-to-r from-teal-600 to-teal-700 px-3.5 py-2 text-xs font-semibold text-white shadow-md hover:from-teal-700 hover:to-teal-800 disabled:opacity-60 disabled:shadow-none transition-colors"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                   {loading ? 'Generating PDF...' : 'Download PDF'}
@@ -1118,7 +1118,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                     type="button"
                     disabled={savingEdits}
                     onClick={saveManualEdits}
-                    className="inline-flex items-center gap-2 rounded-lg border-2 border-blue-600 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-2 rounded-lg border-2 border-teal-600 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-100 disabled:opacity-60 transition-colors"
                   >
                     {savingEdits ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Save Changes
@@ -1138,11 +1138,11 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
             <div className="p-4 md:p-6 space-y-4">
               <div className="overflow-auto rounded-xl border-2 border-gray-200 bg-white shadow-sm">
                 <table className="w-full min-w-350 text-[11px] border-collapse">
-                  <thead className="bg-gradient-to-r from-blue-600 to-blue-700">
+                  <thead className="bg-gradient-to-r from-teal-600 to-teal-700">
                     <tr>
-                      <th className="text-left p-2.5 text-white border-b-2 border-blue-800 w-24 font-semibold tracking-wide">Slot / Day</th>
+                      <th className="text-left p-2.5 text-white border-b-2 border-teal-800 w-24 font-semibold tracking-wide">Slot / Day</th>
                       {sortedSlots.map((slot) => (
-                        <th key={getSlotKey(slot)} className="text-center p-2.5 text-white border-b-2 border-blue-800 border-l border-blue-500 whitespace-nowrap font-medium">
+                        <th key={getSlotKey(slot)} className="text-center p-2.5 text-white border-b-2 border-teal-800 border-l border-teal-500 whitespace-nowrap font-medium">
                           {getSlotLabel(slot)}
                         </th>
                       ))}
@@ -1151,7 +1151,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   <tbody>
                     {sortedDays.map((day) => (
                       <tr key={day.day_id} className={day.is_working_day ? 'bg-white' : 'bg-gray-100'}>
-                        <td className="p-2 text-blue-900 border-2 border-gray-300 bg-blue-50 font-semibold whitespace-nowrap align-top">{getDayLabel(day)}</td>
+                        <td className="p-2 text-teal-900 border-2 border-gray-300 bg-teal-50 font-semibold whitespace-nowrap align-top">{getDayLabel(day)}</td>
                         {sortedSlots.map((slot) => {
                           const entryList = modalCellMap.get(`${day.day_id}::${getSlotKey(slot)}`) || [];
                           return (

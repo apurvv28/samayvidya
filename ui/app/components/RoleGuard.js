@@ -44,7 +44,7 @@ export default function RoleGuard({ allowedRole, children }) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
           <p className="text-sm text-gray-600">Loading dashboard...</p>
         </div>
       </div>

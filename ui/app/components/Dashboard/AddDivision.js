@@ -171,7 +171,7 @@ export default function AddDivision() {
                 <label className="text-sm font-medium text-gray-700">Division Name</label>
                 <input 
                     type="text" 
-                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all outline-none"
                     placeholder="e.g. SY-CSE-A"
                     value={divisionData.division_name}
                     onChange={(e) => setDivisionData({...divisionData, division_name: e.target.value})}
@@ -180,7 +180,7 @@ export default function AddDivision() {
             <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">Department</label>
                  <select 
-                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all outline-none"
                     value={divisionData.department_id}
                     onChange={(e) => setDivisionData({...divisionData, department_id: e.target.value})}
                 >
@@ -195,7 +195,7 @@ export default function AddDivision() {
             <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">Academic Year</label>
                 <select 
-                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all outline-none"
                     value={divisionData.year}
                     onChange={(e) => setDivisionData({...divisionData, year: e.target.value})}
                 >
@@ -208,7 +208,7 @@ export default function AddDivision() {
                 <label className="text-sm font-medium text-gray-700">Student Count</label>
                 <input 
                     type="number" 
-                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all outline-none"
                     placeholder="60"
                     value={divisionData.student_count}
                     onChange={(e) => setDivisionData({...divisionData, student_count: parseInt(e.target.value) || 0})}
@@ -219,7 +219,7 @@ export default function AddDivision() {
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                  <label className="text-sm font-medium text-gray-700">Upload Student Data (CSV)</label>
-                 <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded border-2 border-blue-100">Auto-generates Student IDs</span>
+                 <span className="text-xs text-teal-600 bg-teal-50 px-2 py-1 rounded border-2 border-teal-100">Auto-generates Student IDs</span>
             </div>
            
             <div 
@@ -227,7 +227,7 @@ export default function AddDivision() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+                    isDragging ? 'border-teal-500 bg-teal-50' : 'border-gray-300 hover:border-gray-400 bg-gray-50'
                 }`}
             >
                 {file ? (
@@ -275,7 +275,7 @@ export default function AddDivision() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <UsersIcon className="w-7 h-7 text-blue-600" />
+            <UsersIcon className="w-7 h-7 text-teal-600" />
             All Divisions
           </h2>
           <p className="text-gray-600 mt-1">View and manage existing divisions</p>
@@ -296,7 +296,7 @@ export default function AddDivision() {
             {divisions.map((division) => (
               <div
                 key={division.division_id}
-                className="bg-white border-2 border-gray-100 rounded-xl p-5 hover:border-blue-300 transition-all duration-200"
+                className="bg-white border-2 border-gray-100 rounded-xl p-5 hover:border-teal-300 transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>

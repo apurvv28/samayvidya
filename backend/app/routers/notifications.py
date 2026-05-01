@@ -49,7 +49,7 @@ async def mark_notification_as_read(
         
         response = (
             supabase.table("notification_log")
-            .update({"status": "READ"})
+            .delete()
             .eq("notification_id", notification_id)
             .execute()
         )
@@ -77,7 +77,7 @@ async def mark_all_notifications_as_read(
         
         response = (
             supabase.table("notification_log")
-            .update({"status": "READ"})
+            .delete()
             .eq("recipient_email", recipient_email)
             .execute()
         )

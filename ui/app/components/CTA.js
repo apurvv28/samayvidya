@@ -21,12 +21,12 @@ export default function CTA() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
-          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-50 via-white to-blue-50 px-8 py-20 sm:px-16 lg:px-24 shadow-xl border-2 border-gray-100"
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-50 via-white to-teal-50 px-8 py-20 sm:px-16 lg:px-24 shadow-xl border-2 border-gray-100"
         >
           {/* Inner subtle glow effects */}
           <div className="absolute top-0 left-0 w-full h-full">
-            <div className="absolute top-0 left-1/4 w-64 h-64 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
-            <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
+            <div className="absolute top-0 left-1/4 w-64 h-64 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
+            <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-teal-100 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
           </div>
 
           <div className="relative z-10 grid lg:grid-cols-2 gap-12 items-center">
@@ -78,7 +78,7 @@ export default function CTA() {
                     transition={{ delay: 0.5 + i * 0.1 }}
                     className="flex items-center gap-3"
                   >
-                    <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 text-teal-600 flex-shrink-0" />
                     <span className="text-gray-300">{benefit}</span>
                   </motion.div>
                 ))}
@@ -139,7 +139,7 @@ export default function CTA() {
                   viewport={{ once: true }}
                   transition={{ delay: 0.6 + i * 0.1 }}
                   whileHover={{ scale: 1.05, y: -5 }}
-                  className="p-5 rounded-2xl bg-white border-2 border-gray-100 hover:border-blue-200 hover:shadow-lg transition-all"
+                  className="p-5 rounded-2xl bg-white border-2 border-gray-100 hover:border-teal-200 hover:shadow-lg transition-all"
                 >
                   <div className="text-2xl font-bold text-gray-900 mb-1">
                     {stat.value}

@@ -47,7 +47,7 @@ export default function Features() {
           <h2 className="text-3xl sm:text-4xl font-normal tracking-tight text-gray-900 mb-2" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
             Intelligent Features for
           </h2>
-          <h2 className="text-3xl sm:text-4xl font-bold italic bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent mb-4" style={{ fontFamily: 'Georgia, serif' }}>
+          <h2 className="text-3xl sm:text-4xl font-bold italic bg-gradient-to-r from-teal-600 to-teal-600 bg-clip-text text-transparent mb-4" style={{ fontFamily: 'Georgia, serif' }}>
             Academic Excellence
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-base text-gray-600">
@@ -102,13 +102,13 @@ function FeatureCard({ feature, index }) {
     >
       {/* Gradient overlay on hover */}
       <motion.div
-        className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 opacity-0 transition-opacity duration-300"
+        className="absolute inset-0 rounded-2xl bg-gradient-to-br from-teal-50 to-indigo-50 opacity-0 transition-opacity duration-300"
         animate={{ opacity: isHovered ? 0.5 : 0 }}
       />
       
       <div className="relative" style={{ transform: "translateZ(20px)" }}>
         <motion.div 
-          className="mb-5 inline-flex rounded-xl bg-gray-100 p-3 transition-all duration-300 group-hover:bg-blue-100 group-hover:scale-110"
+          className="mb-5 inline-flex rounded-xl bg-gray-100 p-3 transition-all duration-300 group-hover:bg-teal-100 group-hover:scale-110"
           whileHover={{ rotate: [0, -10, 10, -10, 0] }}
           transition={{ duration: 0.5 }}
         >

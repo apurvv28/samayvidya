@@ -18,7 +18,7 @@ export default function AuthPage() {
 
       <div className="z-10 w-full max-w-5xl relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
          <div className="hidden lg:block space-y-4">
-           <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold">
+           <span className="inline-flex items-center px-3 py-1 rounded-full bg-teal-50 border border-teal-100 text-teal-700 text-xs font-semibold">
              Academic Access Portal
            </span>
            <h1 className="text-4xl font-normal text-gray-900 leading-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>

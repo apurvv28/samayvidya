@@ -66,20 +66,20 @@ export default function HowItWorks() {
               <motion.div
                 whileHover={{ y: -8 }}
                 transition={{ type: "spring", stiffness: 300 }}
-                className="relative h-full p-8 rounded-2xl bg-white border-2 border-gray-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300"
+                className="relative h-full p-8 rounded-2xl bg-white border-2 border-gray-100 hover:border-teal-200 hover:shadow-xl transition-all duration-300"
               >
                 {/* Step number badge */}
                 <div className="flex items-start gap-6 mb-6">
                   <motion.div
                     whileHover={{ scale: 1.1, rotate: 5 }}
-                    className="flex-shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg"
+                    className="flex-shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg"
                   >
                     {step.number}
                   </motion.div>
 
                   <motion.div
                     whileHover={{ scale: 1.1 }}
-                    className="flex-shrink-0 w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-100 transition-colors"
+                    className="flex-shrink-0 w-14 h-14 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600 group-hover:bg-teal-100 transition-colors"
                   >
                     {step.icon}
                   </motion.div>
@@ -95,7 +95,7 @@ export default function HowItWorks() {
 
                 {/* Arrow indicator */}
                 <motion.div
-                  className="flex items-center gap-2 text-blue-600 font-medium text-xs"
+                  className="flex items-center gap-2 text-teal-600 font-medium text-xs"
                   whileHover={{ x: 5 }}
                 >
                   Learn more
@@ -104,7 +104,7 @@ export default function HowItWorks() {
 
                 {/* Hover gradient overlay */}
                 <motion.div
-                  className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                  className="absolute inset-0 rounded-2xl bg-gradient-to-br from-teal-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                 />
               </motion.div>
 
@@ -115,7 +115,7 @@ export default function HowItWorks() {
                   whileInView={{ scaleX: 1 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.5 + index * 0.1, duration: 0.8 }}
-                  className="hidden md:block absolute top-1/2 -right-6 lg:-right-12 w-6 lg:w-12 h-0.5 bg-gradient-to-r from-blue-300 to-blue-200 origin-left"
+                  className="hidden md:block absolute top-1/2 -right-6 lg:-right-12 w-6 lg:w-12 h-0.5 bg-gradient-to-r from-teal-300 to-teal-200 origin-left"
                 />
               )}
             </motion.div>

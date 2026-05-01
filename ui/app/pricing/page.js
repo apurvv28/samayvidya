@@ -85,7 +85,7 @@ export default function PricingPage() {
               <h1 className="text-3xl sm:text-4xl font-normal tracking-tight text-gray-900 mb-2" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
                 Simple, Transparent
               </h1>
-              <h1 className="text-3xl sm:text-4xl font-bold italic bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent mb-4" style={{ fontFamily: 'Georgia, serif' }}>
+              <h1 className="text-3xl sm:text-4xl font-bold italic bg-gradient-to-r from-teal-600 to-teal-600 bg-clip-text text-transparent mb-4" style={{ fontFamily: 'Georgia, serif' }}>
                 Pricing
               </h1>
               <p className="mx-auto mt-3 max-w-2xl text-base text-gray-600">
@@ -103,14 +103,14 @@ export default function PricingPage() {
                   transition={{ duration: 0.5, delay: index * 0.1 }}
                   className={`relative rounded-2xl border-2 ${
                     plan.popular
-                      ? 'border-blue-500 shadow-xl'
+                      ? 'border-teal-500 shadow-xl'
                       : 'border-gray-200 shadow-sm'
                   } bg-white p-8 hover:shadow-lg transition-all`}
                 >
                   {/* Popular Badge */}
                   {plan.popular && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                      <span className="inline-flex items-center px-4 py-1 rounded-full bg-blue-500 text-white text-xs font-semibold">
+                      <span className="inline-flex items-center px-4 py-1 rounded-full bg-teal-500 text-white text-xs font-semibold">
                         Most Popular
                       </span>
                     </div>
@@ -176,7 +176,7 @@ export default function PricingPage() {
             >
               <p className="text-sm text-gray-600">
                 Need a custom plan?{' '}
-                <a href="#contact" className="text-blue-600 font-semibold hover:text-blue-700">
+                <a href="#contact" className="text-teal-600 font-semibold hover:text-teal-700">
                   Contact us
                 </a>{' '}
                 for enterprise solutions

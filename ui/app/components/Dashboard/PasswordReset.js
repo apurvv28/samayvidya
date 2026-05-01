@@ -203,7 +203,7 @@ export default function PasswordReset({ userEmail }) {
           onClick={() => setActiveTab('change')}
           className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
             activeTab === 'change'
-              ? 'bg-white text-blue-700 border border-blue-200'
+              ? 'bg-white text-teal-700 border border-teal-200'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -214,7 +214,7 @@ export default function PasswordReset({ userEmail }) {
           onClick={() => setActiveTab('reset')}
           className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
             activeTab === 'reset'
-              ? 'bg-white text-blue-700 border border-blue-200'
+              ? 'bg-white text-teal-700 border border-teal-200'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -245,7 +245,7 @@ export default function PasswordReset({ userEmail }) {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   placeholder="Enter current password"
                 />
                 <button
@@ -270,7 +270,7 @@ export default function PasswordReset({ userEmail }) {
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   placeholder="Enter new password (min 6 characters)"
                 />
                 <button
@@ -295,7 +295,7 @@ export default function PasswordReset({ userEmail }) {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   placeholder="Confirm new password"
                 />
                 <button
@@ -371,7 +371,7 @@ export default function PasswordReset({ userEmail }) {
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   placeholder="Enter your email"
                 />
               </div>
@@ -399,8 +399,8 @@ export default function PasswordReset({ userEmail }) {
             <form onSubmit={handleResetPassword} className="space-y-4">
               {/* OTP Timer */}
               {otpTimer > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-                  <p className="text-sm text-blue-700">
+                <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 text-center">
+                  <p className="text-sm text-teal-700">
                     OTP expires in: <span className="font-bold">{formatTime(otpTimer)}</span>
                   </p>
                 </div>
@@ -417,7 +417,7 @@ export default function PasswordReset({ userEmail }) {
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   required
                   maxLength={6}
-                  className="w-full px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 text-center text-2xl tracking-widest placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 text-center text-2xl tracking-widest placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   placeholder="000000"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -437,7 +437,7 @@ export default function PasswordReset({ userEmail }) {
                     onChange={(e) => setResetNewPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     placeholder="Enter new password (min 6 characters)"
                   />
                   <button
@@ -462,7 +462,7 @@ export default function PasswordReset({ userEmail }) {
                     onChange={(e) => setResetConfirmPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     placeholder="Confirm new password"
                   />
                   <button

@@ -393,8 +393,8 @@ export default function ManageFacultyGrid() {
             className="w-full flex items-center justify-between mb-4"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border-2 border-blue-200">
-                <Users className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center border-2 border-teal-200">
+                <Users className="w-5 h-5 text-teal-600" />
               </div>
               <div className="text-left">
                 <h3 className="text-lg font-bold text-gray-900">Faculty List</h3>
@@ -407,7 +407,7 @@ export default function ManageFacultyGrid() {
           {showFacultyList && (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {facultyList.map(faculty => (
-                <div key={faculty.faculty_id} className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors">
+                <div key={faculty.faculty_id} className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3 hover:border-teal-300 transition-colors">
                   <p className="text-sm font-semibold text-gray-900">{faculty.faculty_name}</p>
                   <p className="text-xs text-gray-600">{faculty.email}</p>
                   {faculty.designation && (
@@ -516,7 +516,7 @@ export default function ManageFacultyGrid() {
                       </p>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${
                         request.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                        request.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                        request.status === 'IN_PROGRESS' ? 'bg-teal-100 text-teal-700' :
                         'bg-yellow-100 text-yellow-700'
                       }`}>
                         {request.status}
@@ -547,7 +547,7 @@ export default function ManageFacultyGrid() {
                             <div className="space-y-1">
                               <select
                                 onChange={(e) => handleAssignReplacement(slot.affected_slot_id, e.target.value)}
-                                className="w-full bg-white border-2 border-gray-300 rounded px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none"
+                                className="w-full bg-white border-2 border-gray-300 rounded px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none"
                                 defaultValue=""
                               >
                                 <option value="">Assign Faculty...</option>

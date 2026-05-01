@@ -46,7 +46,7 @@ export default function Trust() {
           <h2 className="text-3xl sm:text-4xl font-normal tracking-tight text-gray-900 mb-2" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
             Enterprise-grade from
           </h2>
-          <h2 className="text-3xl sm:text-4xl font-bold italic bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-4" style={{ fontFamily: 'Georgia, serif' }}>
+          <h2 className="text-3xl sm:text-4xl font-bold italic bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent mb-4" style={{ fontFamily: 'Georgia, serif' }}>
             day one
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-base text-gray-600">
@@ -87,14 +87,14 @@ export default function Trust() {
             >
               {/* Gradient overlay on hover */}
               <motion.div
-                className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 opacity-0 group-hover:opacity-50 transition-opacity duration-300"
+                className="absolute inset-0 rounded-2xl bg-gradient-to-br from-teal-50 to-indigo-50 opacity-0 group-hover:opacity-50 transition-opacity duration-300"
               />
               
               <div className="relative">
                 <motion.div
                   whileHover={{ rotate: [0, -10, 10, 0], scale: 1.1 }}
                   transition={{ duration: 0.5 }}
-                  className="mb-4 inline-flex rounded-xl bg-gray-100 p-3 group-hover:bg-blue-100 transition-colors duration-300"
+                  className="mb-4 inline-flex rounded-xl bg-gray-100 p-3 group-hover:bg-teal-100 transition-colors duration-300"
                 >
                   {item.icon}
                 </motion.div>
@@ -135,7 +135,7 @@ export default function Trust() {
           
           <div className="space-y-3 font-mono text-sm">
             {[
-              { time: '12:34:21', event: 'agent_executed', color: 'text-blue-600' },
+              { time: '12:34:21', event: 'agent_executed', color: 'text-teal-600' },
               { time: '12:34:18', event: 'decision_logged', color: 'text-indigo-600' },
               { time: '12:34:15', event: 'tool_called', color: 'text-purple-600' },
               { time: '12:34:12', event: 'memory_updated', color: 'text-pink-600' },

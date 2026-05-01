@@ -31,7 +31,7 @@ export default function NotificationBell({ userEmail, limit }) {
         const data = await res.json();
         const notifs = data.data || [];
         setNotifications(notifs);
-        setUnreadCount(notifs.filter(n => n.status !== 'READ').length);
+        setUnreadCount(notifs.length);
       }
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -60,10 +60,8 @@ export default function NotificationBell({ userEmail, limit }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      // Update local state
-      setNotifications(prev =>
-        prev.map(n => n.notification_id === notificationId ? { ...n, status: 'READ' } : n)
-      );
+      // Update local state by removing the read notification
+      setNotifications(prev => prev.filter(n => n.notification_id !== notificationId));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
@@ -79,7 +77,8 @@ export default function NotificationBell({ userEmail, limit }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      setNotifications(prev => prev.map(n => ({ ...n, status: 'READ' })));
+      // Clear all notifications locally
+      setNotifications([]);
       setUnreadCount(0);
     } catch (error) {
       console.error('Failed to mark all as read:', error);
@@ -154,7 +153,7 @@ export default function NotificationBell({ userEmail, limit }) {
                   <button
                     onClick={markAllAsRead}
                     disabled={loading}
-                    className="text-xs text-blue-600 hover:text-blue-500 disabled:opacity-50"
+                    className="text-xs text-teal-600 hover:text-teal-500 disabled:opacity-50"
                   >
                     Mark all read
                   </button>
@@ -180,14 +179,8 @@ export default function NotificationBell({ userEmail, limit }) {
                   {notifications.map((notif) => (
                     <div
                       key={notif.notification_id}
-                      className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                        notif.status !== 'READ' ? 'bg-blue-50/60' : ''
-                      }`}
-                      onClick={() => {
-                        if (notif.status !== 'READ') {
-                          markAsRead(notif.notification_id);
-                        }
-                      }}
+                      className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer bg-teal-50/60`}
+                      onClick={() => markAsRead(notif.notification_id)}
                     >
                       <div className="flex items-start gap-3">
                         <span className="text-2xl flex-shrink-0">
@@ -198,9 +191,7 @@ export default function NotificationBell({ userEmail, limit }) {
                             <p className="text-sm font-semibold text-gray-900">
                               {notif.subject}
                             </p>
-                            {notif.status !== 'READ' && (
-                              <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1" />
-                            )}
+                            <span className="w-2 h-2 bg-teal-500 rounded-full flex-shrink-0 mt-1" />
                           </div>
                           <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                             {notif.body}

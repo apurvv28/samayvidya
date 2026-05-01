@@ -94,8 +94,8 @@ export default function SignupForm({ onFlip }) {
         <div className="relative w-full h-full bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 flex flex-col justify-center shadow-xl">
             
             <div className="mb-4 text-center">
-                <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-teal-600" />
                 </div>
                 <h2 className="text-2xl font-normal text-gray-900 mb-1" style={{ fontFamily: '"Times New Roman", Times, serif' }}>Create Your Department</h2>
                 <p className="text-gray-600 text-xs">Register as a coordinator and set up your department</p>
@@ -112,14 +112,14 @@ export default function SignupForm({ onFlip }) {
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Full Name</label>
                         <div className="relative group/input">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-teal-600 transition-colors" />
                             <input 
                             type="text" 
                             name="name"
                             required
                             value={formData.name}
                             onChange={handleChange}
-                            className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                             placeholder="John Doe"
                             />
                         </div>
@@ -128,14 +128,14 @@ export default function SignupForm({ onFlip }) {
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Phone</label>
                         <div className="relative group/input">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-teal-600 transition-colors" />
                             <input 
                             type="tel" 
                             name="phone"
                             required
                             value={formData.phone}
                             onChange={handleChange}
-                            className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                             placeholder="+91 98765 43210"
                             />
                         </div>
@@ -145,24 +145,24 @@ export default function SignupForm({ onFlip }) {
                 <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Email Address</label>
                 <div className="relative group/input">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-teal-600 transition-colors" />
                     <input 
                     type="email" 
                     name="email"
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                    className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                     placeholder="name@example.com"
                     />
                 </div>
                 </div>
 
                 {/* Department Creation Section */}
-                <div className="space-y-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <div className="space-y-2 p-3 bg-teal-50 border border-teal-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-2">
-                        <Building2 className="h-4 w-4 text-blue-600" />
-                        <h3 className="text-sm font-semibold text-blue-700">Department Information</h3>
+                        <Building2 className="h-4 w-4 text-teal-600" />
+                        <h3 className="text-sm font-semibold text-teal-700">Department Information</h3>
                     </div>
                     
                     <div className="space-y-1">
@@ -176,7 +176,7 @@ export default function SignupForm({ onFlip }) {
                             onChange={handleChange}
                             required
                             placeholder="e.g., Computer Science & AI"
-                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                         />
                     </div>
                     <div className="space-y-1">
@@ -191,7 +191,7 @@ export default function SignupForm({ onFlip }) {
                             required
                             placeholder="e.g., CSAI"
                             maxLength={10}
-                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all uppercase"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all uppercase"
                         />
                         <p className="text-[11px] text-gray-500 ml-1">Short code (max 10 characters, e.g., CS, CSAI, MECH)</p>
                     </div>
@@ -201,14 +201,14 @@ export default function SignupForm({ onFlip }) {
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Password</label>
                         <div className="relative group/input">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-teal-600 transition-colors" />
                             <input 
                             type="password" 
                             name="password"
                             required
                             value={formData.password}
                             onChange={handleChange}
-                            className="w-full bg-white border border-gray-300 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                             placeholder="Create a password"
                             />
                         </div>
@@ -217,14 +217,14 @@ export default function SignupForm({ onFlip }) {
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Confirm Password</label>
                         <div className="relative group/input">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-teal-600 transition-colors" />
                             <input 
                             type="password" 
                             name="confirmPassword"
                             required
                             value={formData.confirmPassword}
                             onChange={handleChange}
-                            className="w-full bg-white border border-gray-300 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                             placeholder="Confirm password"
                             />
                         </div>
@@ -254,7 +254,7 @@ export default function SignupForm({ onFlip }) {
                 Already have an account?{' '}
                 <button 
                     onClick={onFlip}
-                    className="text-blue-600 hover:text-blue-700 font-semibold transition-colors hover:underline underline-offset-4"
+                    className="text-teal-600 hover:text-teal-700 font-semibold transition-colors hover:underline underline-offset-4"
                 >
                     Log in
                 </button>

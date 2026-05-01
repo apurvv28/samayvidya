@@ -15,7 +15,7 @@ export default function Hero() {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, type: "spring" }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold text-blue-700 mb-6"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-100 text-xs font-semibold text-teal-700 mb-6"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Powered by Agentic AI
@@ -32,7 +32,7 @@ export default function Hero() {
               Agentic Intelligence for
             </span>
             <motion.span
-              className="block bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 bg-clip-text text-transparent font-bold italic"
+              className="block bg-gradient-to-r from-teal-600 via-teal-500 to-teal-600 bg-clip-text text-transparent font-bold italic"
               animate={{
                 backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'],
               }}

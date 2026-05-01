@@ -21,7 +21,7 @@ export default function DashboardLayout({ children, title, subtitle, icon }) {
             >
               <div className="flex items-center gap-4 mb-2">
                 {icon && (
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
                     {icon}
                   </div>
                 )}
@@ -66,7 +66,7 @@ export function DashboardCard({ children, className = '', hover = true }) {
 // Stat Card Component
 export function StatCard({ icon, label, value, color = 'blue' }) {
   const colorClasses = {
-    blue: 'bg-blue-50 border-blue-100 text-blue-600',
+    blue: 'bg-teal-50 border-teal-100 text-teal-600',
     green: 'bg-green-50 border-green-100 text-green-600',
     yellow: 'bg-yellow-50 border-yellow-100 text-yellow-600',
     red: 'bg-red-50 border-red-100 text-red-600',
@@ -117,7 +117,7 @@ export function Badge({ children, variant = 'default' }) {
     success: 'bg-green-50 text-green-700 border-green-200',
     warning: 'bg-yellow-50 text-yellow-700 border-yellow-200',
     danger: 'bg-red-50 text-red-700 border-red-200',
-    info: 'bg-blue-50 text-blue-700 border-blue-200',
+    info: 'bg-teal-50 text-teal-700 border-teal-200',
   };
 
   return (
@@ -146,7 +146,7 @@ export function LoadingState({ message = 'Loading...' }) {
   return (
     <div className="flex items-center justify-center py-12">
       <div className="text-center">
-        <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
+        <div className="w-12 h-12 border-4 border-gray-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4" />
         <p className="text-sm text-gray-600">{message}</p>
       </div>
     </div>

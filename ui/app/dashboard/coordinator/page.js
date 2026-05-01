@@ -101,19 +101,19 @@ export default function CoordinatorDashboard() {
   const getTabIcon = () => {
     switch (activeTab) {
       case 'semester':
-        return <BookOpen className="w-6 h-6 text-blue-600" />;
+        return <BookOpen className="w-6 h-6 text-teal-600" />;
       case 'agent':
-        return <BrainCircuit className="w-6 h-6 text-blue-600" />;
+        return <BrainCircuit className="w-6 h-6 text-teal-600" />;
       case 'timetable':
-        return <Calendar className="w-6 h-6 text-blue-600" />;
+        return <Calendar className="w-6 h-6 text-teal-600" />;
       case 'add-faculty':
-        return <Users className="w-6 h-6 text-blue-600" />;
+        return <Users className="w-6 h-6 text-teal-600" />;
       case 'manage-load':
-        return <LayoutDashboard className="w-6 h-6 text-blue-600" />;
+        return <LayoutDashboard className="w-6 h-6 text-teal-600" />;
       case 'add-division':
-        return <PlusCircle className="w-6 h-6 text-blue-600" />;
+        return <PlusCircle className="w-6 h-6 text-teal-600" />;
       case 'resources':
-        return <Building2 className="w-6 h-6 text-blue-600" />;
+        return <Building2 className="w-6 h-6 text-teal-600" />;
       default:
         return null;
     }
@@ -169,8 +169,8 @@ export default function CoordinatorDashboard() {
             {/* Custom header for Semester with inline controls on the right */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -189,8 +189,8 @@ export default function CoordinatorDashboard() {
             {/* Custom header for Manage Faculty with inline controls on the right */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -211,8 +211,8 @@ export default function CoordinatorDashboard() {
             {/* Custom header for Manage Load with inline controls on the right */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <LayoutDashboard className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <LayoutDashboard className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -230,8 +230,8 @@ export default function CoordinatorDashboard() {
           <>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -249,8 +249,8 @@ export default function CoordinatorDashboard() {
           <>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -269,8 +269,8 @@ export default function CoordinatorDashboard() {
             {/* Custom header for Agent Orchestrator with inline controls on the right */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <BrainCircuit className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <BrainCircuit className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -292,8 +292,8 @@ export default function CoordinatorDashboard() {
             {/* Custom header for Timetable Viewer with inline controls on the right */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-normal text-gray-900" style={{ fontFamily: '"Times New Roman", Times, serif' }}>

@@ -356,15 +356,15 @@ export default function FacultyDashboard() {
   };
 
   const renderFacultySelector = () => (
-    <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl px-6 py-4">
+    <div className="mb-6 bg-gradient-to-r from-teal-50 to-indigo-50 border-2 border-teal-200 rounded-xl px-6 py-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <label className="text-sm font-semibold text-blue-700 whitespace-nowrap">
+        <label className="text-sm font-semibold text-teal-700 whitespace-nowrap">
           Your Faculty Profile:
         </label>
         <select
           value={selectedFacultyId}
           onChange={handleFacultySelect}
-          className="flex-1 max-w-md bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+          className="flex-1 max-w-md bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none cursor-pointer"
         >
           <option value="">Select your name</option>
           {facultyList.map(f => (
@@ -405,8 +405,8 @@ export default function FacultyDashboard() {
           <div className="max-w-2xl mx-auto">
             <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-200">
-                  <FilePlus className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center border border-teal-200">
+                  <FilePlus className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Apply for Leave</h2>
@@ -440,7 +440,7 @@ export default function FacultyDashboard() {
                       value={leaveForm.start_date}
                       onChange={handleLeaveChange}
                       required
-                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
@@ -453,7 +453,7 @@ export default function FacultyDashboard() {
                       value={leaveForm.end_date}
                       onChange={handleLeaveChange}
                       required
-                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
                     />
                   </div>
                 </div>
@@ -467,7 +467,7 @@ export default function FacultyDashboard() {
                     value={leaveForm.leave_type}
                     onChange={handleLeaveChange}
                     required
-                    className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
+                    className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all appearance-none cursor-pointer"
                   >
                     <option value="FULL_DAY">Full Day</option>
                     <option value="HALF_DAY_FIRST">Half Day (First Half)</option>
@@ -486,7 +486,7 @@ export default function FacultyDashboard() {
                     required
                     rows={4}
                     placeholder="Please provide a detailed reason for your leave request..."
-                    className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
+                    className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all resize-none"
                   />
                 </div>
 
@@ -500,11 +500,11 @@ export default function FacultyDashboard() {
                       accept="image/*"
                       onChange={handleImageUpload}
                       disabled={uploadingImage}
-                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-600 file:text-white hover:file:bg-teal-700 file:cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all disabled:opacity-50"
                     />
                     {uploadingImage && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                        <Loader2 className="w-5 h-5 animate-spin text-teal-600" />
                       </div>
                     )}
                   </div>
@@ -542,8 +542,8 @@ export default function FacultyDashboard() {
             <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-200">
-                    <FileText className="w-5 h-5 text-blue-600" />
+                  <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center border border-teal-200">
+                    <FileText className="w-5 h-5 text-teal-600" />
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">My Leave Requests</h2>
@@ -553,7 +553,7 @@ export default function FacultyDashboard() {
                 <button
                   onClick={fetchMyLeaves}
                   disabled={loadingLeaves || !selectedFacultyId}
-                  className="px-4 py-2 text-xs font-semibold text-blue-700 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-semibold text-teal-700 border-2 border-teal-200 rounded-lg hover:bg-teal-50 transition-colors disabled:opacity-50"
                 >
                   Refresh
                 </button>
@@ -656,7 +656,7 @@ export default function FacultyDashboard() {
                           </div>
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold border-2 ${
                             request.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
-                            request.status === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            request.status === 'IN_PROGRESS' ? 'bg-teal-50 text-teal-700 border-teal-200' :
                             'bg-yellow-50 text-yellow-700 border-yellow-200'
                           }`}>
                             {request.status}
@@ -767,8 +767,8 @@ export default function FacultyDashboard() {
                   <Loader2 className="w-4 h-4 animate-spin" /> Loading faculty profiles...
                 </div>
               ) : selectedFaculty ? (
-                <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl px-6 py-4">
-                  <p className="text-sm text-blue-700">
+                <div className="mb-6 bg-gradient-to-r from-teal-50 to-indigo-50 border-2 border-teal-200 rounded-xl px-6 py-4">
+                  <p className="text-sm text-teal-700">
                     Signed in as <span className="font-semibold">{selectedFaculty.faculty_name}</span>
                     {selectedFaculty.email ? ` (${selectedFaculty.email})` : ''}
                   </p>

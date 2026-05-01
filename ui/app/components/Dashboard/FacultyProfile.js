@@ -112,7 +112,7 @@ export default function FacultyProfile() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading profile...</p>
         </div>
       </div>
@@ -136,10 +136,10 @@ export default function FacultyProfile() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Profile Header */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
+      <div className="bg-gradient-to-r from-teal-50 to-indigo-50 border-2 border-teal-200 rounded-2xl p-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center border border-blue-200">
-            <User className="w-8 h-8 text-blue-600" />
+          <div className="w-16 h-16 bg-teal-100 rounded-xl flex items-center justify-center border border-teal-200">
+            <User className="w-8 h-8 text-teal-600" />
           </div>
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-900 mb-1">
@@ -151,7 +151,7 @@ export default function FacultyProfile() {
                 {facultyData.faculty_code}
               </span>
               <span>{facultyData.designation || 'Faculty'}</span>
-              <span className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs">
+              <span className="px-2 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-teal-700 text-xs">
                 {facultyData.role}
               </span>
             </div>
@@ -163,7 +163,7 @@ export default function FacultyProfile() {
       <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <Clock className="w-6 h-6 text-blue-600" />
+            <Clock className="w-6 h-6 text-teal-600" />
             <h3 className="text-xl font-bold text-gray-900">Daily Availability</h3>
           </div>
           <p className="text-gray-600 text-sm">
@@ -185,7 +185,7 @@ export default function FacultyProfile() {
                 min="08:00"
                 max="18:00"
                 required
-                className="w-full bg-white border-2 border-gray-300 rounded-lg py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full bg-white border-2 border-gray-300 rounded-lg py-3 px-4 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
               />
               <p className="text-xs text-gray-500">
                 Earliest time you&apos;re available (08:00 - 18:00)
@@ -204,7 +204,7 @@ export default function FacultyProfile() {
                 min="08:00"
                 max="18:00"
                 required
-                className="w-full bg-white border-2 border-gray-300 rounded-lg py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full bg-white border-2 border-gray-300 rounded-lg py-3 px-4 text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
               />
               <p className="text-xs text-gray-500">
                 Latest time you&apos;re available (08:00 - 18:00)
@@ -260,12 +260,12 @@ export default function FacultyProfile() {
       </div>
 
       {/* Info Box */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+      <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
         <div className="flex gap-3">
-          <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
+          <Clock className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-teal-800">
             <p className="font-semibold mb-1">About Availability Times</p>
-            <p className="text-blue-700">
+            <p className="text-teal-700">
               Your preferred start and end times help the system schedule your classes within your available hours. 
               The timetable generator will respect these preferences when creating schedules.
             </p>
