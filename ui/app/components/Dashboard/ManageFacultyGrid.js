@@ -5,10 +5,12 @@ import {
   Loader2, Users, FileText, RefreshCw, CheckCircle2, XCircle, 
   AlertCircle, UserPlus, ChevronDown, ChevronUp, Send 
 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export default function ManageFacultyGrid() {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [facultyList, setFacultyList] = useState([]);
   const [leaveApplications, setLeaveApplications] = useState([]);
@@ -267,26 +269,17 @@ export default function ManageFacultyGrid() {
   return (
     <div className="space-y-4">
       {/* Top Section - Add Faculty */}
-      <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center border border-purple-500/30">
-            <UserPlus className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Add New Faculty</h2>
-            <p className="text-gray-400 text-sm">Register a new faculty member</p>
-          </div>
-        </div>
+      <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
 
         {facultySuccess && (
-          <div className="mb-4 p-4 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm flex items-center gap-2">
+          <div className="mb-4 p-4 rounded-lg bg-green-50 border-2 border-green-200 text-green-700 text-sm flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
             {facultySuccess}
           </div>
         )}
 
         {facultyError && (
-          <div className="mb-4 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+          <div className="mb-4 p-4 rounded-lg bg-red-50 border-2 border-red-200 text-red-700 text-sm flex items-center gap-2">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             {facultyError}
           </div>
@@ -300,7 +293,7 @@ export default function ManageFacultyGrid() {
             onChange={handleAddFacultyChange}
             placeholder="Faculty Name *"
             required
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <input
             type="email"
@@ -309,7 +302,7 @@ export default function ManageFacultyGrid() {
             onChange={handleAddFacultyChange}
             placeholder="Email *"
             required
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <input
             type="tel"
@@ -317,14 +310,14 @@ export default function ManageFacultyGrid() {
             value={addFacultyForm.phone}
             onChange={handleAddFacultyChange}
             placeholder="Phone"
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <select
             name="department_id"
             value={addFacultyForm.department_id}
             onChange={handleAddFacultyChange}
             required
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           >
             <option value="">Select Department *</option>
             {departments.map(dept => (
@@ -339,7 +332,7 @@ export default function ManageFacultyGrid() {
             value={addFacultyForm.faculty_code}
             onChange={handleAddFacultyChange}
             placeholder="Faculty Code"
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <input
             type="text"
@@ -347,7 +340,7 @@ export default function ManageFacultyGrid() {
             value={addFacultyForm.designation}
             onChange={handleAddFacultyChange}
             placeholder="Designation"
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <input
             type="text"
@@ -355,7 +348,7 @@ export default function ManageFacultyGrid() {
             value={addFacultyForm.qualification}
             onChange={handleAddFacultyChange}
             placeholder="Qualification"
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <input
             type="number"
@@ -363,7 +356,7 @@ export default function ManageFacultyGrid() {
             value={addFacultyForm.experience_years}
             onChange={handleAddFacultyChange}
             placeholder="Experience (years)"
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           <input
             type="text"
@@ -371,14 +364,14 @@ export default function ManageFacultyGrid() {
             value={addFacultyForm.specialization}
             onChange={handleAddFacultyChange}
             placeholder="Specialization"
-            className="bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-gray-900 text-sm focus:outline-none focus:border-purple-600 transition-colors"
           />
           
           <div className="md:col-span-3 flex gap-4 justify-end">
             <button
               type="submit"
               disabled={submittingFaculty}
-              className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl transition-all flex items-center gap-2 disabled:opacity-50"
+              className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold rounded-xl transition-all flex items-center gap-2 disabled:opacity-50"
             >
               {submittingFaculty ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -394,29 +387,29 @@ export default function ManageFacultyGrid() {
       {/* Bottom Grid - 3 Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Faculty List */}
-        <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+        <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
           <button
             onClick={() => setShowFacultyList(!showFacultyList)}
             className="w-full flex items-center justify-between mb-4"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
-                <Users className="w-5 h-5 text-blue-400" />
+              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border-2 border-blue-200">
+                <Users className="w-5 h-5 text-blue-600" />
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-white">Faculty List</h3>
-                <p className="text-gray-400 text-xs">{facultyList.length} members</p>
+                <h3 className="text-lg font-bold text-gray-900">Faculty List</h3>
+                <p className="text-gray-600 text-xs">{facultyList.length} members</p>
               </div>
             </div>
-            {showFacultyList ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+            {showFacultyList ? <ChevronUp className="w-5 h-5 text-gray-600" /> : <ChevronDown className="w-5 h-5 text-gray-600" />}
           </button>
 
           {showFacultyList && (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {facultyList.map(faculty => (
-                <div key={faculty.faculty_id} className="bg-gray-800/40 border border-white/5 rounded-lg p-3">
-                  <p className="text-sm font-semibold text-white">{faculty.faculty_name}</p>
-                  <p className="text-xs text-gray-400">{faculty.email}</p>
+                <div key={faculty.faculty_id} className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors">
+                  <p className="text-sm font-semibold text-gray-900">{faculty.faculty_name}</p>
+                  <p className="text-xs text-gray-600">{faculty.email}</p>
                   {faculty.designation && (
                     <p className="text-xs text-gray-500 mt-1">{faculty.designation}</p>
                   )}
@@ -427,19 +420,19 @@ export default function ManageFacultyGrid() {
         </div>
 
         {/* Leave Applications */}
-        <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+        <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-500/20 rounded-xl flex items-center justify-center border border-yellow-500/30">
-                <FileText className="w-5 h-5 text-yellow-400" />
+              <div className="w-10 h-10 bg-yellow-50 rounded-xl flex items-center justify-center border-2 border-yellow-200">
+                <FileText className="w-5 h-5 text-yellow-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Leave Applications</h3>
-                <p className="text-gray-400 text-xs">{leaveApplications.length} pending</p>
+                <h3 className="text-lg font-bold text-gray-900">Leave Applications</h3>
+                <p className="text-gray-600 text-xs">{leaveApplications.length} pending</p>
               </div>
             </div>
-            <button onClick={fetchData} className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
-              <RefreshCw className="w-4 h-4 text-gray-400" />
+            <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <RefreshCw className="w-4 h-4 text-gray-600" />
             </button>
           </div>
 
@@ -448,28 +441,28 @@ export default function ManageFacultyGrid() {
               <p className="text-center text-gray-500 text-sm py-8">No pending applications</p>
             ) : (
               leaveApplications.map(leave => (
-                <div key={leave.leave_id} className="bg-gray-800/40 border border-white/5 rounded-lg p-3">
+                <div key={leave.leave_id} className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-white">{leave.faculty?.faculty_name || 'Unknown'}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm font-semibold text-gray-900">{leave.faculty?.faculty_name || 'Unknown'}</p>
+                      <p className="text-xs text-gray-600">
                         {new Date(leave.start_date).toLocaleDateString()} - {new Date(leave.end_date).toLocaleDateString()}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">{leave.reason}</p>
                     </div>
                     <button
                       onClick={() => setExpandedLeave(expandedLeave === leave.leave_id ? null : leave.leave_id)}
-                      className="text-gray-400 hover:text-white"
+                      className="text-gray-600 hover:text-gray-900 transition-colors"
                     >
                       {expandedLeave === leave.leave_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                   </div>
                   
                   {expandedLeave === leave.leave_id && (
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-white/5">
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                       <button
                         onClick={() => handleLeaveAction(leave.leave_id, 'approve')}
-                        className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
+                        className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Approve
@@ -479,7 +472,7 @@ export default function ManageFacultyGrid() {
                           const reason = prompt('Enter rejection reason:');
                           if (reason) handleLeaveAction(leave.leave_id, 'reject', reason);
                         }}
-                        className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
+                        className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
                       >
                         <XCircle className="w-3.5 h-3.5" />
                         Reject
@@ -493,19 +486,19 @@ export default function ManageFacultyGrid() {
         </div>
 
         {/* Slot Adjustment Requests */}
-        <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+        <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center border border-orange-500/30">
-                <AlertCircle className="w-5 h-5 text-orange-400" />
+              <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center border-2 border-orange-200">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Slot Adjustments</h3>
-                <p className="text-gray-400 text-xs">{adjustmentRequests.length} requests</p>
+                <h3 className="text-lg font-bold text-gray-900">Slot Adjustments</h3>
+                <p className="text-gray-600 text-xs">{adjustmentRequests.length} requests</p>
               </div>
             </div>
-            <button onClick={fetchData} className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
-              <RefreshCw className="w-4 h-4 text-gray-400" />
+            <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <RefreshCw className="w-4 h-4 text-gray-600" />
             </button>
           </div>
 
@@ -514,38 +507,38 @@ export default function ManageFacultyGrid() {
               <p className="text-center text-gray-500 text-sm py-8">No adjustment requests</p>
             ) : (
               adjustmentRequests.map(request => (
-                <div key={request.request_id} className="bg-gray-800/40 border border-white/5 rounded-lg p-3">
+                <div key={request.request_id} className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-white">{request.faculty?.faculty_name || 'Unknown'}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm font-semibold text-gray-900">{request.faculty?.faculty_name || 'Unknown'}</p>
+                      <p className="text-xs text-gray-600">
                         {request.resolved_slots}/{request.total_affected_slots} slots resolved
                       </p>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${
-                        request.status === 'COMPLETED' ? 'bg-green-500/15 text-green-400' :
-                        request.status === 'IN_PROGRESS' ? 'bg-blue-500/15 text-blue-400' :
-                        'bg-yellow-500/15 text-yellow-400'
+                        request.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                        request.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
                       }`}>
                         {request.status}
                       </span>
                     </div>
                     <button
                       onClick={() => handleViewAffectedSlots(request.request_id)}
-                      className="text-gray-400 hover:text-white"
+                      className="text-gray-600 hover:text-gray-900 transition-colors"
                     >
                       {expandedRequest === request.request_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                   </div>
                   
                   {expandedRequest === request.request_id && affectedSlots.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
                       {affectedSlots.map(slot => (
-                        <div key={slot.affected_slot_id} className="bg-gray-900/60 border border-white/5 rounded p-2">
+                        <div key={slot.affected_slot_id} className="bg-white border-2 border-gray-200 rounded p-2">
                           <div className="text-xs space-y-1 mb-2">
-                            <p className="text-white font-medium">
+                            <p className="text-gray-900 font-medium">
                               {slot.days?.day_name} | {slot.time_slots?.start_time}-{slot.time_slots?.end_time}
                             </p>
-                            <p className="text-gray-400">
+                            <p className="text-gray-600">
                               {slot.subjects?.subject_name} - {slot.divisions?.division_name}
                             </p>
                           </div>
@@ -554,7 +547,7 @@ export default function ManageFacultyGrid() {
                             <div className="space-y-1">
                               <select
                                 onChange={(e) => handleAssignReplacement(slot.affected_slot_id, e.target.value)}
-                                className="w-full bg-gray-950/60 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                                className="w-full bg-white border-2 border-gray-300 rounded px-2 py-1 text-xs text-gray-900 focus:border-blue-600 focus:outline-none"
                                 defaultValue=""
                               >
                                 <option value="">Assign Faculty...</option>
@@ -572,11 +565,11 @@ export default function ManageFacultyGrid() {
                           )}
                           
                           {slot.status === 'ASSIGNED' && slot.replacement_faculty && (
-                            <p className="text-xs text-green-400">✓ Covered by: {slot.replacement_faculty.faculty_name}</p>
+                            <p className="text-xs text-green-700">✓ Covered by: {slot.replacement_faculty.faculty_name}</p>
                           )}
                           
                           {slot.status === 'NO_REPLACEMENT' && (
-                            <p className="text-xs text-red-400">⚠ No faculty available</p>
+                            <p className="text-xs text-red-700">⚠ No faculty available</p>
                           )}
                         </div>
                       ))}

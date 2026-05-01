@@ -198,13 +198,13 @@ export default function PasswordReset({ userEmail }) {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Tab Selector */}
-      <div className="flex gap-2 p-1 bg-gray-900/50 rounded-lg border border-white/10">
+      <div className="flex gap-2 p-1 bg-gray-100 rounded-lg border border-gray-200">
         <button
           onClick={() => setActiveTab('change')}
           className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
             activeTab === 'change'
-              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-              : 'text-gray-400 hover:text-gray-300'
+              ? 'bg-white text-blue-700 border border-blue-200'
+              : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           <Lock className="w-4 h-4 inline mr-2" />
@@ -214,8 +214,8 @@ export default function PasswordReset({ userEmail }) {
           onClick={() => setActiveTab('reset')}
           className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
             activeTab === 'reset'
-              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-              : 'text-gray-400 hover:text-gray-300'
+              ? 'bg-white text-blue-700 border border-blue-200'
+              : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           <Key className="w-4 h-4 inline mr-2" />
@@ -225,10 +225,10 @@ export default function PasswordReset({ userEmail }) {
 
       {/* Change Password Tab */}
       {activeTab === 'change' && (
-        <div className="bg-gray-900/50 border border-white/10 rounded-xl p-6">
+        <div className="bg-white border-2 border-gray-100 rounded-xl p-6">
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-white mb-2">Change Password</h3>
-            <p className="text-sm text-gray-400">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Change Password</h3>
+            <p className="text-sm text-gray-600">
               Enter your current password and choose a new password
             </p>
           </div>
@@ -236,7 +236,7 @@ export default function PasswordReset({ userEmail }) {
           <form onSubmit={handleChangePassword} className="space-y-4">
             {/* Current Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Current Password
               </label>
               <div className="relative">
@@ -245,13 +245,13 @@ export default function PasswordReset({ userEmail }) {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-2 pr-10 bg-gray-800 border border-white/10 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter current password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 >
                   {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -260,7 +260,7 @@ export default function PasswordReset({ userEmail }) {
 
             {/* New Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 New Password
               </label>
               <div className="relative">
@@ -270,13 +270,13 @@ export default function PasswordReset({ userEmail }) {
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full px-4 py-2 pr-10 bg-gray-800 border border-white/10 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter new password (min 6 characters)"
                 />
                 <button
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 >
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -285,7 +285,7 @@ export default function PasswordReset({ userEmail }) {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Confirm New Password
               </label>
               <div className="relative">
@@ -295,13 +295,13 @@ export default function PasswordReset({ userEmail }) {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full px-4 py-2 pr-10 bg-gray-800 border border-white/10 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Confirm new password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -311,7 +311,7 @@ export default function PasswordReset({ userEmail }) {
             {/* Password Match Indicator */}
             {newPassword && confirmPassword && (
               <div className={`flex items-center gap-2 text-sm ${
-                newPassword === confirmPassword ? 'text-green-400' : 'text-red-400'
+                newPassword === confirmPassword ? 'text-green-600' : 'text-red-600'
               }`}>
                 {newPassword === confirmPassword ? (
                   <>
@@ -331,7 +331,7 @@ export default function PasswordReset({ userEmail }) {
             <button
               type="submit"
               disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-              className="w-full px-4 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {changingPassword ? (
                 <>
@@ -351,11 +351,11 @@ export default function PasswordReset({ userEmail }) {
 
       {/* Reset Password Tab */}
       {activeTab === 'reset' && (
-        <div className="bg-gray-900/50 border border-white/10 rounded-xl p-6">
+        <div className="bg-white border-2 border-gray-100 rounded-xl p-6">
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-white mb-2">Reset Password</h3>
-            <p className="text-sm text-gray-400">
-              Forgot your password? We'll send you an OTP to reset it
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Reset Password</h3>
+            <p className="text-sm text-gray-600">
+              Forgot your password? We&apos;ll send you an OTP to reset it
             </p>
           </div>
 
@@ -363,7 +363,7 @@ export default function PasswordReset({ userEmail }) {
             /* Step 1: Request OTP */
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
                 </label>
                 <input
@@ -371,7 +371,7 @@ export default function PasswordReset({ userEmail }) {
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-2 bg-gray-800 border border-white/10 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-full px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter your email"
                 />
               </div>
@@ -379,7 +379,7 @@ export default function PasswordReset({ userEmail }) {
               <button
                 onClick={handleRequestOTP}
                 disabled={sendingOtp || !resetEmail}
-                className="w-full px-4 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 {sendingOtp ? (
                   <>
@@ -399,8 +399,8 @@ export default function PasswordReset({ userEmail }) {
             <form onSubmit={handleResetPassword} className="space-y-4">
               {/* OTP Timer */}
               {otpTimer > 0 && (
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-center">
-                  <p className="text-sm text-blue-300">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                  <p className="text-sm text-blue-700">
                     OTP expires in: <span className="font-bold">{formatTime(otpTimer)}</span>
                   </p>
                 </div>
@@ -408,7 +408,7 @@ export default function PasswordReset({ userEmail }) {
 
               {/* OTP Input */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Enter OTP
                 </label>
                 <input
@@ -417,17 +417,17 @@ export default function PasswordReset({ userEmail }) {
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   required
                   maxLength={6}
-                  className="w-full px-4 py-2 bg-gray-800 border border-white/10 rounded-lg text-white text-center text-2xl tracking-widest placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-full px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 text-center text-2xl tracking-widest placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="000000"
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-500 mt-1">
                   Check your email for the 6-digit OTP
                 </p>
               </div>
 
               {/* New Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   New Password
                 </label>
                 <div className="relative">
@@ -437,13 +437,13 @@ export default function PasswordReset({ userEmail }) {
                     onChange={(e) => setResetNewPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full px-4 py-2 pr-10 bg-gray-800 border border-white/10 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                    className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter new password (min 6 characters)"
                   />
                   <button
                     type="button"
                     onClick={() => setShowResetNewPassword(!showResetNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
                     {showResetNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -452,7 +452,7 @@ export default function PasswordReset({ userEmail }) {
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Confirm New Password
                 </label>
                 <div className="relative">
@@ -462,13 +462,13 @@ export default function PasswordReset({ userEmail }) {
                     onChange={(e) => setResetConfirmPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full px-4 py-2 pr-10 bg-gray-800 border border-white/10 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                    className="w-full px-4 py-2 pr-10 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Confirm new password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
                     {showResetConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -478,7 +478,7 @@ export default function PasswordReset({ userEmail }) {
               {/* Password Match Indicator */}
               {resetNewPassword && resetConfirmPassword && (
                 <div className={`flex items-center gap-2 text-sm ${
-                  resetNewPassword === resetConfirmPassword ? 'text-green-400' : 'text-red-400'
+                  resetNewPassword === resetConfirmPassword ? 'text-green-600' : 'text-red-600'
                 }`}>
                   {resetNewPassword === resetConfirmPassword ? (
                     <>
@@ -498,7 +498,7 @@ export default function PasswordReset({ userEmail }) {
               <button
                 type="submit"
                 disabled={resettingPassword || !otp || !resetNewPassword || !resetConfirmPassword || resetNewPassword !== resetConfirmPassword}
-                className="w-full px-4 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 {resettingPassword ? (
                   <>
@@ -522,9 +522,9 @@ export default function PasswordReset({ userEmail }) {
                   setResetNewPassword('');
                   setResetConfirmPassword('');
                 }}
-                className="w-full text-sm text-gray-400 hover:text-gray-300 transition-colors"
+                className="w-full text-sm text-gray-600 hover:text-gray-900 transition-colors"
               >
-                Didn't receive OTP? Send again
+                Didn&apos;t receive OTP? Send again
               </button>
             </form>
           )}

@@ -1,19 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { BackgroundBeams } from '../../components/ui/BackgroundBeams';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
+import DashboardLayout, { DashboardCard } from '../../components/Dashboard/DashboardLayout';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
 import FacultyProfile from '../../components/Dashboard/FacultyProfile';
 import RoleGuard from '../../components/RoleGuard';
+import { useAuth } from '../../context/AuthContext';
 import {
   Loader2, Calendar, FilePlus, FileText, CheckCircle2, XCircle,
-  Clock, AlertCircle, Send
+  Clock, AlertCircle, Send, LogOut, UserCircle
 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export default function FacultyDashboard() {
+  const router = useRouter();
+  const { signOut } = useAuth();
   const [activeTab, setActiveTab] = useState('timetable');
   const [latestVersionId, setLatestVersionId] = useState(null);
 
@@ -45,6 +49,18 @@ export default function FacultyDashboard() {
   // Affected slots state
   const [affectedSlots, setAffectedSlots] = useState([]);
   const [loadingAffectedSlots, setLoadingAffectedSlots] = useState(false);
+
+  const navItems = [
+    { id: 'timetable', label: 'Timetable', icon: Calendar },
+    { id: 'apply-leave', label: 'Apply Leave', icon: FilePlus },
+    { id: 'my-leaves', label: 'My Leaves', icon: FileText },
+    { id: 'profile', label: 'Profile', icon: UserCircle },
+  ];
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/');
+  };
 
   // Fetch faculty list and timetable version
   useEffect(() => {
@@ -92,15 +108,7 @@ export default function FacultyDashboard() {
     fetchData();
   }, []);
 
-  // Fetch my leaves when tab switches or faculty changes
-  useEffect(() => {
-    if (activeTab === 'my-leaves' && selectedFacultyId) {
-      fetchMyLeaves();
-      fetchAffectedSlots();
-    }
-  }, [activeTab, selectedFacultyId]);
-
-  const fetchMyLeaves = async () => {
+  const fetchMyLeaves = useCallback(async () => {
     if (!selectedFacultyId) return;
     try {
       setLoadingLeaves(true);
@@ -121,9 +129,9 @@ export default function FacultyDashboard() {
     } finally {
       setLoadingLeaves(false);
     }
-  };
+  }, [selectedFacultyId]);
 
-  const fetchAffectedSlots = async () => {
+  const fetchAffectedSlots = useCallback(async () => {
     if (!selectedFacultyId) return;
     try {
       setLoadingAffectedSlots(true);
@@ -142,7 +150,15 @@ export default function FacultyDashboard() {
     } finally {
       setLoadingAffectedSlots(false);
     }
-  };
+  }, [selectedFacultyId]);
+
+  // Fetch my leaves when tab switches or faculty changes
+  useEffect(() => {
+    if (activeTab === 'my-leaves' && selectedFacultyId) {
+      fetchMyLeaves();
+      fetchAffectedSlots();
+    }
+  }, [activeTab, selectedFacultyId, fetchMyLeaves, fetchAffectedSlots]);
 
   const handleFacultySelect = (e) => {
     const id = e.target.value;
@@ -320,19 +336,19 @@ export default function FacultyDashboard() {
     switch (status) {
       case 'APPROVED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/15 text-green-400 text-xs font-semibold border border-green-500/20">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-semibold border-2 border-green-200">
             <CheckCircle2 className="w-3.5 h-3.5" /> Approved
           </span>
         );
       case 'REJECTED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 text-red-400 text-xs font-semibold border border-red-500/20">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 text-xs font-semibold border-2 border-red-200">
             <XCircle className="w-3.5 h-3.5" /> Rejected
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/15 text-yellow-400 text-xs font-semibold border border-yellow-500/20">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 text-xs font-semibold border-2 border-yellow-200">
             <Clock className="w-3.5 h-3.5" /> Pending
           </span>
         );
@@ -340,15 +356,15 @@ export default function FacultyDashboard() {
   };
 
   const renderFacultySelector = () => (
-    <div className="mb-6 bg-gradient-to-r from-purple-900/30 to-indigo-900/20 border border-purple-500/20 rounded-xl px-6 py-4 backdrop-blur-sm">
+    <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl px-6 py-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <label className="text-sm font-semibold text-purple-300 whitespace-nowrap">
+        <label className="text-sm font-semibold text-blue-700 whitespace-nowrap">
           Your Faculty Profile:
         </label>
         <select
           value={selectedFacultyId}
           onChange={handleFacultySelect}
-          className="flex-1 max-w-md bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 appearance-none cursor-pointer"
+          className="flex-1 max-w-md bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
         >
           <option value="">Select your name</option>
           {facultyList.map(f => (
@@ -365,7 +381,7 @@ export default function FacultyDashboard() {
     switch (activeTab) {
       case 'timetable':
         return (
-          <div className="bg-gray-900/50 border border-white/5 rounded-2xl min-h-[60vh] backdrop-blur-sm">
+          <div className="bg-white border-2 border-gray-100 rounded-2xl min-h-[60vh]">
             {selectedFacultyId ? (
               <TimetableViewer
                 versionId={latestVersionId}
@@ -374,9 +390,9 @@ export default function FacultyDashboard() {
                 showOnlyFacultyView={true}
               />
             ) : (
-              <div className="flex items-center justify-center h-[60vh] text-gray-400">
+              <div className="flex items-center justify-center h-[60vh] text-gray-600">
                 <div className="text-center space-y-2">
-                  <Calendar className="w-12 h-12 mx-auto text-gray-600" />
+                  <Calendar className="w-12 h-12 mx-auto text-gray-400" />
                   <p>Please select your faculty profile to view timetable</p>
                 </div>
               </div>
@@ -387,26 +403,26 @@ export default function FacultyDashboard() {
       case 'apply-leave':
         return (
           <div className="max-w-2xl mx-auto">
-            <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-8 backdrop-blur-sm">
+            <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center border border-purple-500/30">
-                  <FilePlus className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-200">
+                  <FilePlus className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Apply for Leave</h2>
-                  <p className="text-gray-400 text-sm">Submit a leave request for HOD approval</p>
+                  <h2 className="text-xl font-bold text-gray-900">Apply for Leave</h2>
+                  <p className="text-gray-600 text-sm">Submit a leave request for HOD approval</p>
                 </div>
               </div>
 
               {leaveSuccess && (
-                <div className="mb-4 p-4 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm flex items-center gap-2">
+                <div className="mb-4 p-4 rounded-lg bg-green-50 border-2 border-green-200 text-green-700 text-sm flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
                   {leaveSuccess}
                 </div>
               )}
 
               {leaveError && (
-                <div className="mb-4 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border-2 border-red-200 text-red-700 text-sm flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 flex-shrink-0" />
                   {leaveError}
                 </div>
@@ -415,7 +431,7 @@ export default function FacultyDashboard() {
               <form onSubmit={handleLeaveSubmit} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Start Date
                     </label>
                     <input
@@ -424,11 +440,11 @@ export default function FacultyDashboard() {
                       value={leaveForm.start_date}
                       onChange={handleLeaveChange}
                       required
-                      className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       End Date
                     </label>
                     <input
@@ -437,13 +453,13 @@ export default function FacultyDashboard() {
                       value={leaveForm.end_date}
                       onChange={handleLeaveChange}
                       required
-                      className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Leave Type
                   </label>
                   <select
@@ -451,7 +467,7 @@ export default function FacultyDashboard() {
                     value={leaveForm.leave_type}
                     onChange={handleLeaveChange}
                     required
-                    className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all appearance-none cursor-pointer"
+                    className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
                   >
                     <option value="FULL_DAY">Full Day</option>
                     <option value="HALF_DAY_FIRST">Half Day (First Half)</option>
@@ -460,7 +476,7 @@ export default function FacultyDashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Reason for Leave
                   </label>
                   <textarea
@@ -470,13 +486,13 @@ export default function FacultyDashboard() {
                     required
                     rows={4}
                     placeholder="Please provide a detailed reason for your leave request..."
-                    className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all resize-none"
+                    className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Proof Image <span className="text-red-400">*</span>
+                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Proof Image <span className="text-red-600">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -484,16 +500,16 @@ export default function FacultyDashboard() {
                       accept="image/*"
                       onChange={handleImageUpload}
                       disabled={uploadingImage}
-                      className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-3 px-4 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-500 file:cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all disabled:opacity-50"
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
                     />
                     {uploadingImage && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                       </div>
                     )}
                   </div>
                   {imageFile && leaveForm.proof_image_url && (
-                    <div className="flex items-center gap-2 text-sm text-green-400">
+                    <div className="flex items-center gap-2 text-sm text-green-700">
                       <CheckCircle2 className="w-4 h-4" />
                       Image uploaded successfully
                     </div>
@@ -504,7 +520,7 @@ export default function FacultyDashboard() {
                 <button
                   type="submit"
                   disabled={submittingLeave || !selectedFacultyId || uploadingImage}
-                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingLeave ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -523,61 +539,61 @@ export default function FacultyDashboard() {
       case 'my-leaves':
         return (
           <div className="max-w-4xl mx-auto">
-            <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-8 backdrop-blur-sm">
+            <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
-                    <FileText className="w-5 h-5 text-blue-400" />
+                  <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-200">
+                    <FileText className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">My Leave Requests</h2>
-                    <p className="text-gray-400 text-sm">Track the status of your submitted leave requests</p>
+                    <h2 className="text-xl font-bold text-gray-900">My Leave Requests</h2>
+                    <p className="text-gray-600 text-sm">Track the status of your submitted leave requests</p>
                   </div>
                 </div>
                 <button
                   onClick={fetchMyLeaves}
                   disabled={loadingLeaves || !selectedFacultyId}
-                  className="px-4 py-2 text-xs font-semibold text-blue-300 border border-blue-500/30 rounded-lg hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-semibold text-blue-700 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
                 >
                   Refresh
                 </button>
               </div>
 
               {!selectedFacultyId && (
-                <div className="text-center py-8 text-gray-400">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+                <div className="text-center py-8 text-gray-600">
+                  <AlertCircle className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                   <p>Please select your faculty profile above to view your leaves.</p>
                 </div>
               )}
 
               {leavesError && (
-                <div className="mb-4 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border-2 border-red-200 text-red-700 text-sm">
                   {leavesError}
                 </div>
               )}
 
               {loadingLeaves ? (
-                <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                <div className="flex items-center justify-center py-12 gap-2 text-gray-600">
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Loading leave requests...
                 </div>
               ) : selectedFacultyId && myLeaves.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  <FileText className="w-16 h-16 mx-auto mb-4 text-gray-700" />
-                  <p className="text-lg font-medium text-gray-400">No leave requests yet</p>
-                  <p className="text-sm mt-1">Submit a leave request from the "Apply Leave" tab</p>
+                  <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium text-gray-600">No leave requests yet</p>
+                  <p className="text-sm mt-1">Submit a leave request from the &quot;Apply Leave&quot; tab</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {myLeaves.map((leave) => (
                     <div
                       key={leave.leave_id}
-                      className="bg-gray-800/40 border border-white/5 rounded-xl p-5 hover:bg-gray-800/60 transition-colors"
+                      className="bg-gray-50 border-2 border-gray-100 rounded-xl p-5 hover:bg-gray-100 transition-colors"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center gap-3 flex-wrap">
-                            <span className="text-sm font-semibold text-white">
+                            <span className="text-sm font-semibold text-gray-900">
                               {new Date(leave.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                               {' → '}
                               {new Date(leave.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -585,29 +601,29 @@ export default function FacultyDashboard() {
                             {getStatusBadge(leave.status)}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span className="px-2 py-1 bg-gray-700/50 rounded">
+                            <span className="px-2 py-1 bg-gray-200 rounded">
                               {leave.leave_type === 'FULL_DAY' ? 'Full Day' : 
                                leave.leave_type === 'HALF_DAY_FIRST' ? 'Half Day (First Half)' :
                                'Half Day (Second Half)'}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-400">{leave.reason}</p>
+                          <p className="text-sm text-gray-600">{leave.reason}</p>
                           {leave.created_at && (
-                            <p className="text-xs text-gray-600">
+                            <p className="text-xs text-gray-500">
                               Submitted on {new Date(leave.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </p>
                           )}
                           {leave.rejection_reason && leave.status === 'REJECTED' && (
-                            <div className="mt-2 p-3 bg-red-900/20 border border-red-500/20 rounded-lg">
-                              <p className="text-xs font-semibold text-red-400 mb-1">Rejection Reason:</p>
-                              <p className="text-xs text-red-300">{leave.rejection_reason}</p>
+                            <div className="mt-2 p-3 bg-red-50 border-2 border-red-200 rounded-lg">
+                              <p className="text-xs font-semibold text-red-700 mb-1">Rejection Reason:</p>
+                              <p className="text-xs text-red-600">{leave.rejection_reason}</p>
                             </div>
                           )}
                         </div>
                         {leave.status === 'APPROVED' && (
                           <button
                             onClick={() => handleRequestAdjustment(leave.leave_id)}
-                            className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap"
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap"
                           >
                             <Send className="w-3.5 h-3.5" />
                             Request Adjustment
@@ -621,64 +637,64 @@ export default function FacultyDashboard() {
 
               {/* Affected Slots Section */}
               {affectedSlots.length > 0 && (
-                <div className="mt-8 pt-8 border-t border-white/10">
-                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-yellow-400" />
+                <div className="mt-8 pt-8 border-t-2 border-gray-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
                     My Affected Slots
                   </h3>
                   <div className="space-y-4">
                     {affectedSlots.map((request) => (
-                      <div key={request.request_id} className="bg-gray-800/60 border border-yellow-500/20 rounded-xl p-5">
+                      <div key={request.request_id} className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-5">
                         <div className="flex items-center justify-between mb-4">
                           <div>
-                            <p className="text-sm font-semibold text-white">
+                            <p className="text-sm font-semibold text-gray-900">
                               Adjustment Request - {request.status}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-gray-600 mt-1">
                               Progress: {request.resolved_slots}/{request.total_affected_slots} slots resolved
                             </p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            request.status === 'COMPLETED' ? 'bg-green-500/15 text-green-400 border border-green-500/20' :
-                            request.status === 'IN_PROGRESS' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20' :
-                            'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border-2 ${
+                            request.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
+                            request.status === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            'bg-yellow-50 text-yellow-700 border-yellow-200'
                           }`}>
                             {request.status}
                           </span>
                         </div>
                         <div className="space-y-2">
                           {request.affected_slots.map((slot) => (
-                            <div key={slot.affected_slot_id} className="bg-gray-900/40 border border-white/5 rounded-lg p-3">
+                            <div key={slot.affected_slot_id} className="bg-white border-2 border-gray-100 rounded-lg p-3">
                               <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
                                 <div>
                                   <span className="text-gray-500">Day:</span>
-                                  <span className="ml-2 text-white font-medium">{slot.days?.day_name}</span>
+                                  <span className="ml-2 text-gray-900 font-medium">{slot.days?.day_name}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Time:</span>
-                                  <span className="ml-2 text-white font-medium">
+                                  <span className="ml-2 text-gray-900 font-medium">
                                     {slot.time_slots?.start_time} - {slot.time_slots?.end_time}
                                   </span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Subject:</span>
-                                  <span className="ml-2 text-white font-medium">{slot.subjects?.subject_name}</span>
+                                  <span className="ml-2 text-gray-900 font-medium">{slot.subjects?.subject_name}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Division:</span>
-                                  <span className="ml-2 text-white font-medium">{slot.divisions?.division_name}</span>
+                                  <span className="ml-2 text-gray-900 font-medium">{slot.divisions?.division_name}</span>
                                 </div>
                               </div>
                               {slot.replacement_faculty_id && slot.faculty && (
-                                <div className="mt-2 pt-2 border-t border-white/5">
-                                  <span className="text-xs text-green-400">
+                                <div className="mt-2 pt-2 border-t-2 border-gray-100">
+                                  <span className="text-xs text-green-700">
                                     ✓ Covered by: {slot.faculty.faculty_name}
                                   </span>
                                 </div>
                               )}
                               {slot.status === 'NO_REPLACEMENT' && (
-                                <div className="mt-2 pt-2 border-t border-white/5">
-                                  <span className="text-xs text-red-400">
+                                <div className="mt-2 pt-2 border-t-2 border-gray-100">
+                                  <span className="text-xs text-red-700">
                                     ⚠ No faculty available for this slot
                                   </span>
                                 </div>
@@ -705,32 +721,66 @@ export default function FacultyDashboard() {
 
   return (
     <RoleGuard allowedRole="FACULTY">
-      <div className="min-h-screen bg-gray-950 text-white selection:bg-indigo-500/30">
-        <DashboardNavbar role="faculty" activeTab={activeTab} setActiveTab={setActiveTab} />
-        
-        <main className="relative pt-24 pb-12 px-4 sm:px-6 lg:px-8 min-h-screen overflow-hidden">
-          <BackgroundBeams className="opacity-20" />
-          
-          <div className="relative z-10 w-full max-w-7xl mx-auto">
-            {/* Faculty selector - always visible */}
-            {loadingFaculty ? (
-              <div className="mb-6 flex items-center gap-2 text-gray-400 text-sm">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading faculty profiles...
-              </div>
-            ) : selectedFaculty ? (
-              <div className="mb-6 bg-gradient-to-r from-purple-900/30 to-indigo-900/20 border border-purple-500/20 rounded-xl px-6 py-4 backdrop-blur-sm">
-                <p className="text-sm text-purple-200">
-                  Signed in as <span className="font-semibold">{selectedFaculty.faculty_name}</span>
-                  {selectedFaculty.email ? ` (${selectedFaculty.email})` : ''}
-                </p>
-              </div>
-            ) : (
-              renderFacultySelector()
-            )}
+      <div className="min-h-screen bg-white">
+        <DashboardNavbar
+          role="faculty"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          showNavItems={false}
+          showLogout={false}
+        />
 
-            {renderContent()}
+        <DashboardLayout>
+          <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
+            <aside className="h-fit lg:sticky lg:top-24 bg-white border border-gray-200 rounded-xl p-3">
+              <div className="space-y-1">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    aria-current={activeTab === item.id ? 'page' : undefined}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === item.id
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-gray-200 mt-3 pt-3">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </aside>
+
+            <DashboardCard className="min-h-[60vh]">
+              {loadingFaculty ? (
+                <div className="mb-6 flex items-center gap-2 text-gray-600 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading faculty profiles...
+                </div>
+              ) : selectedFaculty ? (
+                <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl px-6 py-4">
+                  <p className="text-sm text-blue-700">
+                    Signed in as <span className="font-semibold">{selectedFaculty.faculty_name}</span>
+                    {selectedFaculty.email ? ` (${selectedFaculty.email})` : ''}
+                  </p>
+                </div>
+              ) : (
+                renderFacultySelector()
+              )}
+
+              {renderContent()}
+            </DashboardCard>
           </div>
-        </main>
+        </DashboardLayout>
       </div>
     </RoleGuard>
   );

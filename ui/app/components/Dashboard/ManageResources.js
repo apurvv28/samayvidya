@@ -135,33 +135,23 @@ export default function ManageResources() {
   const labs = rooms.filter(r => r.room_type === 'LAB');
 
   return (
-    <div className="p-6 space-y-8">
-       <div className="flex justify-between items-center">
-        <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Building2 className="w-6 h-6 text-indigo-400" />
-                Resource Management
-            </h2>
-            <p className="text-gray-400 text-sm mt-1">Manage classrooms and laboratories available for scheduling.</p>
-        </div>
-      </div>
-
+    <div className="p-6 space-y-8 bg-white border-2 border-gray-100 rounded-2xl">
       {loading ? (
           <div className="flex justify-center items-center h-64">
-              <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
       ) : (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Classrooms Panel */}
-        <div className="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden backdrop-blur-sm">
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-800/30">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-blue-400" />
+        <div className="bg-white border-2 border-gray-100 rounded-xl overflow-hidden">
+            <div className="p-4 border-b-2 border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-blue-600" />
                     Classrooms
                 </h3>
                 <button 
                     onClick={() => openAddModal('CLASSROOM')}
-                    className="text-xs bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                    className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border-2 border-blue-200 font-medium"
                 >
                     <Plus className="w-3 h-3" /> Add Classroom
                 </button>
@@ -169,26 +159,26 @@ export default function ManageResources() {
             <div className="p-4">
                 <table className="w-full text-left text-sm">
                     <thead>
-                        <tr className="text-gray-500 border-b border-gray-800">
-                            <th className="pb-2">Name</th>
-                            <th className="pb-2">Capacity</th>
-                            <th className="pb-2 text-right">Actions</th>
+                        <tr className="text-gray-600 border-b-2 border-gray-200">
+                            <th className="pb-2 font-semibold">Name</th>
+                            <th className="pb-2 font-semibold">Capacity</th>
+                            <th className="pb-2 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-800/50">
+                    <tbody className="divide-y divide-gray-200">
                         {classrooms.length === 0 && (
                             <tr>
                                 <td colSpan="3" className="py-4 text-center text-gray-500 italic">No classrooms added yet.</td>
                             </tr>
                         )}
                         {classrooms.map(cr => (
-                            <tr key={cr.room_id} className="group">
-                                <td className="py-3 text-gray-300 group-hover:text-white">{cr.room_number}</td>
-                                <td className="py-3 text-gray-500">{cr.capacity}</td>
+                            <tr key={cr.room_id} className="group hover:bg-gray-50">
+                                <td className="py-3 text-gray-900 group-hover:text-blue-600 font-medium">{cr.room_number}</td>
+                                <td className="py-3 text-gray-600">{cr.capacity}</td>
                                 <td className="py-3 text-right">
                                     <button 
                                         onClick={() => handleDeleteResource(cr.room_id)}
-                                        className="text-red-500/50 hover:text-red-400 transition-colors p-1"
+                                        className="text-red-400 hover:text-red-600 transition-colors p-1"
                                         title="Delete Classroom"
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -202,15 +192,15 @@ export default function ManageResources() {
         </div>
 
         {/* Labs Panel */}
-        <div className="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden backdrop-blur-sm">
-             <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-800/30">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                    <Monitor className="w-4 h-4 text-purple-400" />
+        <div className="bg-white border-2 border-gray-100 rounded-xl overflow-hidden">
+             <div className="p-4 border-b-2 border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-purple-600" />
                     Laboratories
                 </h3>
                 <button 
                     onClick={() => openAddModal('LAB')}
-                    className="text-xs bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                    className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border-2 border-purple-200 font-medium"
                 >
                     <Plus className="w-3 h-3" /> Add Lab
                 </button>
@@ -218,26 +208,26 @@ export default function ManageResources() {
             <div className="p-4">
                  <table className="w-full text-left text-sm">
                     <thead>
-                        <tr className="text-gray-500 border-b border-gray-800">
-                            <th className="pb-2">Name</th>
-                            <th className="pb-2">Capacity</th>
-                            <th className="pb-2 text-right">Actions</th>
+                        <tr className="text-gray-600 border-b-2 border-gray-200">
+                            <th className="pb-2 font-semibold">Name</th>
+                            <th className="pb-2 font-semibold">Capacity</th>
+                            <th className="pb-2 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-800/50">
+                    <tbody className="divide-y divide-gray-200">
                         {labs.length === 0 && (
                             <tr>
                                 <td colSpan="3" className="py-4 text-center text-gray-500 italic">No laboratories added yet.</td>
                             </tr>
                         )}
                         {labs.map(lab => (
-                            <tr key={lab.room_id} className="group">
-                                <td className="py-3 text-gray-300 group-hover:text-white">{lab.room_number}</td>
-                                <td className="py-3 text-gray-500">{lab.capacity}</td>
+                            <tr key={lab.room_id} className="group hover:bg-gray-50">
+                                <td className="py-3 text-gray-900 group-hover:text-purple-600 font-medium">{lab.room_number}</td>
+                                <td className="py-3 text-gray-600">{lab.capacity}</td>
                                 <td className="py-3 text-right">
                                     <button 
                                         onClick={() => handleDeleteResource(lab.room_id)}
-                                        className="text-red-500/50 hover:text-red-400 transition-colors p-1"
+                                        className="text-red-400 hover:text-red-600 transition-colors p-1"
                                         title="Delete Lab"
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -255,15 +245,15 @@ export default function ManageResources() {
       {/* Add Resource Modal */}
       {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
-                  <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-gray-800/50">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                          {resourceType === 'CLASSROOM' ? <GraduationCap className="w-5 h-5 text-blue-400" /> : <Monitor className="w-5 h-5 text-purple-400" />}
+              <div className="bg-white border-2 border-gray-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                  <div className="flex justify-between items-center p-6 border-b-2 border-gray-200 bg-gray-50">
+                      <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                          {resourceType === 'CLASSROOM' ? <GraduationCap className="w-5 h-5 text-blue-600" /> : <Monitor className="w-5 h-5 text-purple-600" />}
                           Add New {resourceType === 'CLASSROOM' ? 'Classroom' : 'Laboratory'}
                       </h3>
                       <button 
                           onClick={() => setShowAddModal(false)}
-                          className="text-gray-400 hover:text-white transition-colors"
+                          className="text-gray-600 hover:text-gray-900 transition-colors"
                       >
                           <X className="w-6 h-6" />
                       </button>
@@ -271,13 +261,13 @@ export default function ManageResources() {
                   
                   <form onSubmit={handleAddResource} className="p-6 space-y-4">
                       <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
                               {resourceType === 'CLASSROOM' ? 'Room Number' : 'Lab Name/Number'}
                           </label>
                           <input 
                               type="text" 
                               required
-                              className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
                               placeholder={resourceType === 'CLASSROOM' ? 'e.g. CR-101' : 'e.g. LAB-1'}
                               value={newRoom.room_number}
                               onChange={(e) => setNewRoom({...newRoom, room_number: e.target.value})}
@@ -285,21 +275,21 @@ export default function ManageResources() {
                       </div>
 
                       <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-1">Capacity</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
                           <input 
                               type="number" 
                               required
                               min="1"
-                              className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors"
                               value={newRoom.capacity}
                               onChange={(e) => setNewRoom({...newRoom, capacity: parseInt(e.target.value)})}
                           />
                       </div>
 
                       <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-1">Department</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                           <select 
-                              className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none"
+                              className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:border-blue-600 focus:outline-none transition-colors appearance-none"
                               value={newRoom.department_id}
                               onChange={(e) => setNewRoom({...newRoom, department_id: e.target.value})}
                               required
@@ -314,14 +304,14 @@ export default function ManageResources() {
                           <button 
                               type="button"
                               onClick={() => setShowAddModal(false)}
-                              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
+                              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
                           >
                               Cancel
                           </button>
                           <button 
                               type="submit"
                               disabled={submitting}
-                              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                           >
                                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                                Save {resourceType === 'CLASSROOM' ? 'Room' : 'Lab'}

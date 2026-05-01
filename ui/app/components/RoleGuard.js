@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, ROLE_DASHBOARD } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
@@ -14,7 +14,10 @@ export default function RoleGuard({ allowedRole, children }) {
   const router = useRouter();
 
   // allowedRole can be a string or array of strings
-  const allowed = Array.isArray(allowedRole) ? allowedRole : [allowedRole];
+  const allowed = useMemo(
+    () => (Array.isArray(allowedRole) ? allowedRole : [allowedRole]),
+    [allowedRole]
+  );
 
   useEffect(() => {
     if (loading) return;
@@ -39,8 +42,11 @@ export default function RoleGuard({ allowedRole, children }) {
 
   if (loading || !profileLoaded || !user || !profile?.role || !allowed.includes(profile.role)) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-sm text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     );
   }

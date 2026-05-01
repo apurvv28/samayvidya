@@ -1,21 +1,33 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BackgroundBeams } from '../../components/ui/BackgroundBeams';
+import { useRouter } from 'next/navigation';
 import DashboardNavbar from '../../components/Dashboard/DashboardNavbar';
+import DashboardLayout, { DashboardCard } from '../../components/Dashboard/DashboardLayout';
 import TimetableViewer from '../../components/Dashboard/TimetableViewer';
 import RoleGuard from '../../components/RoleGuard';
 import { useAuth } from '../../context/AuthContext';
-import { GraduationCap, Loader2, CheckCircle2, Building2, Users, Bell, Clock, BookOpen } from 'lucide-react';
+import { GraduationCap, Loader2, CheckCircle2, Building2, Users, Bell, Clock, BookOpen, Calendar, LogOut } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export default function StudentDashboard() {
-  const { profile } = useAuth();
+  const router = useRouter();
+  const { profile, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState('timetable');
   const [latestVersionId, setLatestVersionId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState(null);
+
+  const navItems = [
+    { id: 'timetable', label: 'Timetable', icon: Calendar },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+  ];
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/');
+  };
   
   // Mock notifications
   const [notifications, setNotifications] = useState([
@@ -60,22 +72,22 @@ export default function StudentDashboard() {
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'success':
-        return <CheckCircle2 className="w-5 h-5 text-green-400" />;
+        return <CheckCircle2 className="w-5 h-5 text-green-600" />;
       case 'warning':
-        return <Bell className="w-5 h-5 text-amber-400" />;
+        return <Bell className="w-5 h-5 text-amber-600" />;
       default:
-        return <Bell className="w-5 h-5 text-blue-400" />;
+        return <Bell className="w-5 h-5 text-blue-600" />;
     }
   };
 
   const getNotificationBgColor = (type) => {
     switch (type) {
       case 'success':
-        return 'bg-green-900/20 border-green-500/20';
+        return 'bg-green-50 border-green-200';
       case 'warning':
-        return 'bg-amber-900/20 border-amber-500/20';
+        return 'bg-amber-50 border-amber-200';
       default:
-        return 'bg-blue-900/20 border-blue-500/20';
+        return 'bg-blue-50 border-blue-200';
     }
   };
 
@@ -165,162 +177,182 @@ export default function StudentDashboard() {
 
   return (
     <RoleGuard allowedRole="STUDENT">
-      <div className="min-h-screen bg-gray-950 text-white selection:bg-indigo-500/30">
-        <DashboardNavbar role="student" activeTab={activeTab} setActiveTab={setActiveTab} />
-        
-        <main className="relative pt-24 pb-12 px-4 sm:px-6 lg:px-8 min-h-screen overflow-hidden">
-          <BackgroundBeams className="opacity-20" />
-          
-          <div className="relative z-10 w-full max-w-7xl mx-auto">
-            {/* Loading State */}
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="text-center">
-                  <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
-                  <p className="text-gray-400">Loading your dashboard...</p>
-                </div>
+      <div className="min-h-screen bg-white">
+        <DashboardNavbar
+          role="student"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          showNavItems={false}
+          showLogout={false}
+        />
+
+        <DashboardLayout>
+          <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
+            <aside className="h-fit lg:sticky lg:top-24 bg-white border border-gray-200 rounded-xl p-3">
+              <div className="space-y-1">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    aria-current={activeTab === item.id ? 'page' : undefined}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === item.id
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
               </div>
-            ) : studentInfo ? (
-              <>
-                {/* Student Info Banner */}
-                <div className="mb-6 bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/20 rounded-xl px-6 py-4 backdrop-blur-sm">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center border border-indigo-500/30">
-                      <GraduationCap className="w-6 h-6 text-indigo-400" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CheckCircle2 className="w-4 h-4 text-green-400" />
-                        <h2 className="text-lg font-bold text-white">
-                          {studentInfo.division_name}
-                        </h2>
+              <div className="border-t border-gray-200 mt-3 pt-3">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </aside>
+
+            <DashboardCard className="min-h-[60vh]">
+              {loading ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="text-center">
+                    <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600">Loading your dashboard...</p>
+                  </div>
+                </div>
+              ) : studentInfo ? (
+                <>
+                  <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl px-6 py-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
+                        <GraduationCap className="w-6 h-6 text-blue-600" />
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5" />
-                          {studentInfo.department_name}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <h2 className="text-lg font-bold text-gray-900">{studentInfo.division_name}</h2>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <BookOpen className="w-3.5 h-3.5" />
-                          {studentInfo.year}
-                        </div>
-                        {studentInfo.prn && (
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
                           <div className="flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5" />
-                            PRN: {studentInfo.prn}
+                            <Building2 className="w-3.5 h-3.5" />
+                            {studentInfo.department_name}
                           </div>
+                          <div className="flex items-center gap-1.5">
+                            <BookOpen className="w-3.5 h-3.5" />
+                            {studentInfo.year}
+                          </div>
+                          {studentInfo.prn && (
+                            <div className="flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5" />
+                              PRN: {studentInfo.prn}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {activeTab === 'timetable' && (
+                    <div className="bg-white border-2 border-gray-100 rounded-2xl min-h-[60vh]">
+                      <TimetableViewer
+                        versionId={latestVersionId}
+                        onVersionChange={(newId) => setLatestVersionId(newId)}
+                        forcedDivisionId={studentInfo.division_id}
+                      />
+                    </div>
+                  )}
+
+                  {activeTab === 'notifications' && (
+                    <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
+                            <Bell className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
+                            <p className="text-sm text-gray-600">
+                              {notifications.filter((n) => !n.read).length} unread notifications
+                            </p>
+                          </div>
+                        </div>
+                        {notifications.some((n) => !n.read) && (
+                          <button
+                            onClick={markAllAsRead}
+                            className="text-sm text-blue-600 hover:text-blue-700 transition-colors font-medium"
+                          >
+                            Mark all as read
+                          </button>
                         )}
                       </div>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Timetable Viewer */}
-                {activeTab === 'timetable' && (
-                  <div className="bg-gray-900/50 border border-white/5 rounded-2xl min-h-[60vh] backdrop-blur-sm">
-                    <TimetableViewer
-                      versionId={latestVersionId}
-                      onVersionChange={(newId) => setLatestVersionId(newId)}
-                      forcedDivisionId={studentInfo.division_id}
-                    />
-                  </div>
-                )}
-
-                {/* Notifications Tab */}
-                {activeTab === 'notifications' && (
-                  <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-6 backdrop-blur-sm">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-500/20 rounded-xl flex items-center justify-center border border-indigo-500/30">
-                          <Bell className="w-5 h-5 text-indigo-400" />
-                        </div>
-                        <div>
-                          <h2 className="text-xl font-bold text-white">Notifications</h2>
-                          <p className="text-sm text-gray-400">
-                            {notifications.filter(n => !n.read).length} unread notifications
-                          </p>
-                        </div>
-                      </div>
-                      {notifications.some(n => !n.read) && (
-                        <button
-                          onClick={markAllAsRead}
-                          className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
-                        >
-                          Mark all as read
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-3">
-                      {notifications.length === 0 ? (
-                        <div className="text-center py-12">
-                          <Bell className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                          <h3 className="text-lg font-semibold text-gray-400 mb-2">No Notifications</h3>
-                          <p className="text-gray-500">You're all caught up!</p>
-                        </div>
-                      ) : (
-                        notifications.map((notif) => (
-                          <div
-                            key={notif.id}
-                            className={`p-4 rounded-xl border transition-all ${
-                              notif.read
-                                ? 'bg-gray-900/30 border-gray-800'
-                                : `${getNotificationBgColor(notif.type)} hover:shadow-lg`
-                            }`}
-                          >
-                            <div className="flex items-start gap-4">
-                              <div className="shrink-0 mt-1">
-                                {getNotificationIcon(notif.type)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <h3 className={`font-semibold ${notif.read ? 'text-gray-400' : 'text-white'}`}>
-                                    {notif.title}
-                                  </h3>
-                                  {!notif.read && (
-                                    <span className="shrink-0 w-2 h-2 bg-indigo-500 rounded-full mt-2"></span>
-                                  )}
-                                </div>
-                                <p className={`text-sm mb-2 ${notif.read ? 'text-gray-500' : 'text-gray-300'}`}>
-                                  {notif.message}
-                                </p>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                    <Clock className="w-3.5 h-3.5" />
-                                    {notif.date}
+                      <div className="space-y-3">
+                        {notifications.length === 0 ? (
+                          <div className="text-center py-12">
+                            <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                            <h3 className="text-lg font-semibold text-gray-600 mb-2">No Notifications</h3>
+                            <p className="text-gray-500">You&apos;re all caught up!</p>
+                          </div>
+                        ) : (
+                          notifications.map((notif) => (
+                            <div
+                              key={notif.id}
+                              className={`p-4 rounded-xl border-2 transition-all ${
+                                notif.read ? 'bg-gray-50 border-gray-100' : `${getNotificationBgColor(notif.type)} hover:shadow-md`
+                              }`}
+                            >
+                              <div className="flex items-start gap-4">
+                                <div className="shrink-0 mt-1">{getNotificationIcon(notif.type)}</div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <h3 className={`font-semibold ${notif.read ? 'text-gray-600' : 'text-gray-900'}`}>
+                                      {notif.title}
+                                    </h3>
+                                    {!notif.read && <span className="shrink-0 w-2 h-2 bg-blue-600 rounded-full mt-2"></span>}
                                   </div>
-                                  {!notif.read && (
-                                    <button
-                                      onClick={() => markAsRead(notif.id)}
-                                      className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                                    >
-                                      Mark as read
-                                    </button>
-                                  )}
+                                  <p className={`text-sm mb-2 ${notif.read ? 'text-gray-500' : 'text-gray-700'}`}>
+                                    {notif.message}
+                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                      <Clock className="w-3.5 h-3.5" />
+                                      {notif.date}
+                                    </div>
+                                    {!notif.read && (
+                                      <button
+                                        onClick={() => markAsRead(notif.id)}
+                                        className="text-xs text-blue-600 hover:text-blue-700 transition-colors font-medium"
+                                      >
+                                        Mark as read
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              /* No Student Info Found */
-              <div className="bg-gray-900/30 border border-white/5 rounded-2xl p-12 text-center backdrop-blur-sm">
-                <GraduationCap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-400 mb-2">
-                  Student Information Not Found
-                </h3>
-                <p className="text-gray-500">
-                  Unable to load your division and department information. Please contact your coordinator.
-                </p>
-              </div>
-            )}
+                  )}
+                </>
+              ) : (
+                <div className="bg-white border-2 border-gray-100 rounded-2xl p-12 text-center">
+                  <GraduationCap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-600 mb-2">Student Information Not Found</h3>
+                  <p className="text-gray-500">
+                    Unable to load your division and department information. Please contact your coordinator.
+                  </p>
+                </div>
+              )}
+            </DashboardCard>
           </div>
-        </main>
+        </DashboardLayout>
       </div>
     </RoleGuard>
   );

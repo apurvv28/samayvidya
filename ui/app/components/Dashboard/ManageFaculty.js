@@ -225,12 +225,12 @@ export default function ManageFaculty() {
   };
 
   const renderTable = (rows, columns, editable) => (
-    <div className="max-h-[65vh] overflow-auto rounded-lg border border-gray-800">
-      <table className="min-w-full text-sm text-gray-200">
-        <thead className="bg-gray-900/90 sticky top-0 z-10">
+    <div className="max-h-[65vh] overflow-auto rounded-lg border-2 border-gray-200">
+      <table className="min-w-full text-sm text-gray-900">
+        <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
           <tr>
             {columns.map((column) => (
-              <th key={column} className="text-left px-4 py-3 border-b border-gray-800 whitespace-nowrap font-medium text-gray-300">
+              <th key={column} className="text-left px-4 py-3 border-b-2 border-blue-800 whitespace-nowrap font-medium text-white">
                 {column}
               </th>
             ))}
@@ -238,7 +238,7 @@ export default function ManageFaculty() {
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={`${editable ? 'preview' : 'db'}-row-${rowIndex}`} className="border-b border-gray-900/70 last:border-b-0 hover:bg-gray-900/40">
+            <tr key={`${editable ? 'preview' : 'db'}-row-${rowIndex}`} className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50">
               {columns.map((column) => (
                 <td key={`${rowIndex}-${column}`} className="px-4 py-2.5 whitespace-nowrap align-top">
                   {editable && isEditingPreview ? (
@@ -246,7 +246,7 @@ export default function ManageFaculty() {
                       type="text"
                       value={row[column] || ''}
                       onChange={(e) => handlePreviewCellChange(rowIndex, column, e.target.value)}
-                      className="w-full min-w-35 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-gray-100"
+                      className="w-full min-w-35 bg-white border-2 border-gray-300 rounded px-2 py-1 text-gray-900 focus:border-blue-600 focus:outline-none"
                     />
                   ) : (
                     row[column] ?? '-'
@@ -261,41 +261,35 @@ export default function ManageFaculty() {
   );
 
   return (
-    <div className="space-y-8 p-6">
-      <div className="flex justify-between items-center gap-4 flex-wrap">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Manage Load Distribution</h2>
-          <p className="text-gray-400">Preview, edit, submit, and replace load distribution uploads.</p>
-        </div>
-        <div className="flex gap-3 flex-wrap">
-          <button
-            onClick={() => {
-              if (dbRows.length > 0) {
-                setShowNewLoadWarning(true);
-                return;
-              }
-              setShowUploadModal(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-medium transition-colors"
-          >
-            <Upload className="w-5 h-5" />
-            {dbRows.length > 0 ? 'New Load' : 'Upload Data'}
-          </button>
-        </div>
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <button
+          onClick={() => {
+            if (dbRows.length > 0) {
+              setShowNewLoadWarning(true);
+              return;
+            }
+            setShowUploadModal(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white font-medium transition-colors"
+        >
+          <Upload className="w-5 h-5" />
+          {dbRows.length > 0 ? 'New Load' : 'Upload Data'}
+        </button>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
         </div>
       ) : (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 backdrop-blur-sm space-y-5">
+        <div className="bg-white border-2 border-gray-100 rounded-2xl p-6 space-y-5">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h3 className="text-xl font-semibold text-white">
+            <h3 className="text-xl font-semibold text-gray-900">
               {dbRows.length > 0 ? 'Saved DB Preview' : 'Load Distribution Preview'}
             </h3>
             {uploadSummary && (
-              <p className="text-sm text-emerald-300">
+              <p className="text-sm text-emerald-700 font-medium">
                 Rows: {uploadSummary.total_rows || 0}
                 {typeof uploadSummary.created === 'number' ? ` | Inserted: ${uploadSummary.created}` : ''}
               </p>
@@ -309,7 +303,7 @@ export default function ManageFaculty() {
                 <button
                   type="button"
                   onClick={() => setShowNewLoadWarning(true)}
-                  className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors"
+                  className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors"
                 >
                   New Load
                 </button>
@@ -323,7 +317,7 @@ export default function ManageFaculty() {
                   <button
                     type="button"
                     onClick={handleStartPreviewEdit}
-                    className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors"
+                    className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors"
                   >
                     Edit Preview
                   </button>
@@ -332,14 +326,14 @@ export default function ManageFaculty() {
                     <button
                       type="button"
                       onClick={handleCancelPreviewEdit}
-                      className="px-6 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                      className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
                     >
                       Cancel Edit
                     </button>
                     <button
                       type="button"
                       onClick={handleSavePreviewEdit}
-                      className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors"
+                      className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
                     >
                       Save Preview
                     </button>
@@ -349,7 +343,7 @@ export default function ManageFaculty() {
                   type="button"
                   onClick={handleSubmitLoadDistribution}
                   disabled={submitting || isEditingPreview}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   {submitting ? 'Submitting...' : 'Submit To Database'}
@@ -357,7 +351,7 @@ export default function ManageFaculty() {
               </div>
             </>
           ) : (
-            <div className="text-center py-10 text-gray-500 bg-gray-950/30 rounded-lg border border-dashed border-gray-800">
+            <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
               <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>Upload a CSV/XLSX file to preview load distribution data.</p>
             </div>
@@ -367,10 +361,10 @@ export default function ManageFaculty() {
 
       {showNewLoadWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-gray-800">
-              <h3 className="text-xl font-bold text-white">Start New Load?</h3>
-              <p className="text-sm text-gray-400 mt-2">
+          <div className="bg-white border-2 border-gray-200 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">Start New Load?</h3>
+              <p className="text-sm text-gray-600 mt-2">
                 Previous load distribution data will be permanently deleted from DB. If you cancel, you cannot add new data.
               </p>
             </div>
@@ -379,7 +373,7 @@ export default function ManageFaculty() {
                 type="button"
                 onClick={() => setShowNewLoadWarning(false)}
                 disabled={clearingLoadData}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -387,7 +381,7 @@ export default function ManageFaculty() {
                 type="button"
                 onClick={handleConfirmNewLoad}
                 disabled={clearingLoadData}
-                className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {clearingLoadData && <Loader2 className="w-4 h-4 animate-spin" />}
                 {clearingLoadData ? 'Deleting...' : 'Delete Previous & Continue'}
@@ -399,10 +393,10 @@ export default function ManageFaculty() {
 
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-gray-800/50">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <Upload className="w-5 h-5 text-emerald-400" />
+          <div className="bg-white border-2 border-gray-200 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-emerald-600" />
                 Upload Load Distribution
               </h3>
               <button
@@ -411,7 +405,7 @@ export default function ManageFaculty() {
                   setShowUploadModal(false);
                   setLoadDistributionFile(null);
                 }}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -419,29 +413,29 @@ export default function ManageFaculty() {
 
             <div className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Load File (CSV/XLSX)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Load File (CSV/XLSX)</label>
                 <input
                   type="file"
                   accept=".csv,.xlsx"
                   onChange={handleFileChange}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white file:mr-4 file:rounded-md file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-500"
+                  className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 file:mr-4 file:rounded-md file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
                 />
                 {loadDistributionFile && (
-                  <p className="text-sm text-emerald-300 mt-2">
+                  <p className="text-sm text-emerald-700 mt-2 font-medium">
                     Selected file: {loadDistributionFile.name}
                   </p>
                 )}
               </div>
 
-              <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 text-sm text-gray-300 space-y-2">
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 text-sm text-gray-700 space-y-2">
                 <div className="flex items-start gap-2">
-                  <FileText className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+                  <FileText className="w-4 h-4 mt-0.5 text-blue-600 shrink-0" />
                   <p>
-                    Required columns: <span className="text-white">Faculty Name, Year, Division, Subject, Theory Hrs, Lab Hrs, Tutorial Hrs</span>.
+                    Required columns: <span className="text-gray-900 font-medium">Faculty Name, Year, Division, Subject, Theory Hrs, Lab Hrs, Tutorial Hrs</span>.
                   </p>
                 </div>
-                <p className="text-gray-400">
-                  Optional columns: <span className="text-white">Batch, Total Hrs/Week</span>. The uploaded file is parsed first and shown as a dynamic table before submission.
+                <p className="text-gray-600">
+                  Optional columns: <span className="text-gray-900 font-medium">Batch, Total Hrs/Week</span>. The uploaded file is parsed first and shown as a dynamic table before submission.
                 </p>
               </div>
 
@@ -453,7 +447,7 @@ export default function ManageFaculty() {
                     setShowUploadModal(false);
                     setLoadDistributionFile(null);
                   }}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
                 >
                   Cancel
                 </button>
@@ -461,7 +455,7 @@ export default function ManageFaculty() {
                   type="button"
                   disabled={uploading || !loadDistributionFile}
                   onClick={handlePreviewUpload}
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {uploading ? 'Parsing...' : 'Upload & Preview'}

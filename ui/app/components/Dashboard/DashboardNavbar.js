@@ -1,14 +1,15 @@
+// app/components/Dashboard/DashboardNavbar.js
 'use client';
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, UserCircle } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from './NotificationBell';
 
-export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
+export default function DashboardNavbar({ role, activeTab, setActiveTab, showNavItems = true, showLogout = true }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { signOut, profile } = useAuth();
   const router = useRouter();
@@ -26,10 +27,10 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
           { id: 'semester', label: 'Semester', icon: BookOpen },
           { id: 'agent', label: 'Agent', icon: BrainCircuit },
           { id: 'timetable', label: 'Timetables', icon: Calendar },
-          { id: 'add-faculty', label: 'Manage Faculty', icon: Users },
-          { id: 'manage-load', label: 'Manage Load', icon: LayoutDashboard },
-          { id: 'add-division', label: 'Manage Divisions', icon: PlusCircle },
-          { id: 'resources', label: 'Manage Resources', icon: Building2 },
+          { id: 'add-faculty', label: 'Faculty', icon: Users },
+          { id: 'manage-load', label: 'Load', icon: LayoutDashboard },
+          { id: 'add-division', label: 'Divisions', icon: PlusCircle },
+          { id: 'resources', label: 'Resources', icon: Building2 },
         ];
       case 'hod':
         return [
@@ -37,19 +38,17 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
           { id: 'timetable', label: 'Timetables', icon: Calendar },
           { id: 'leaves', label: 'Leaves', icon: FileText },
           { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-          { id: 'profile', label: 'Profile', icon: UserCircle },
         ];
       case 'faculty':
         return [
-          { id: 'timetable', label: 'My Timetable', icon: Calendar },
+          { id: 'timetable', label: 'Timetable', icon: Calendar },
           { id: 'apply-leave', label: 'Apply Leave', icon: FilePlus },
           { id: 'my-leaves', label: 'My Leaves', icon: FileText },
-          { id: 'profile', label: 'Profile', icon: UserCircle },
         ];
       case 'student':
         return [
           { id: 'timetable', label: 'Timetable', icon: Calendar },
-          { id: 'notifications', label: 'Notifications', icon: FileText },
+          { id: 'notifications', label: 'Notifications', icon: Bell },
         ];
       default:
         return [
@@ -61,90 +60,105 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
   const navItems = getNavItems();
 
   return (
-    <nav className="fixed top-0 z-50 w-full border-b border-gray-800 bg-gray-900/80 backdrop-blur-md">
+    <motion.nav
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="fixed top-0 z-50 w-full border-b border-gray-200 bg-white/90 backdrop-blur-md shadow-sm"
+    >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Link href="/" className="flex flex-col">
-              <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+              <span className="text-xl font-bold text-gray-900">
                 समयविद्या
               </span>
+              <span className="text-xs text-gray-500 font-medium">Academic Timetable Framework</span>
             </Link>
-            <span className="px-2 py-0.5 rounded-full bg-gray-800 border border-gray-700 text-xs text-gray-400 capitalize">
+            <span className="px-2 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs text-blue-700 font-semibold capitalize">
               {role}
             </span>
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:block">
-            <div className="ml-10 flex items-center space-x-4">
-              {navItems.map((item) => (
+          <div className="hidden lg:block">
+            <div className="flex items-center space-x-1">
+              {showNavItems && navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab && setActiveTab(item.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  aria-current={activeTab === item.id ? 'page' : undefined}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     activeTab === item.id 
-                      ? 'bg-indigo-600/10 text-indigo-400' 
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                      ? 'bg-gray-900 text-white shadow-sm' 
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >
                   <item.icon className="w-4 h-4" />
-                  {item.label}
+                  <span className="hidden xl:inline">{item.label}</span>
                 </button>
               ))}
               
-              <div className="h-6 w-px bg-gray-800 mx-2" />
+              {showNavItems && <div className="h-6 w-px bg-gray-200 mx-2" />}
               
               {/* Notification Bell */}
-              <NotificationBell userEmail={profile?.email} />
+              <div className="px-2">
+                <NotificationBell userEmail={profile?.email} />
+              </div>
               
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
+              {showLogout && (
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden xl:inline">Logout</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <button
-              type="button"
-              className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              <span className="sr-only">Open main menu</span>
-              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+          {/* Mobile actions */}
+          <div className="lg:hidden flex items-center gap-2">
+            <NotificationBell userEmail={profile?.email} />
+            {(showNavItems || showLogout) && (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-lg p-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                <span className="sr-only">Open main menu</span>
+                {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Mobile Navigation */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
+        {isMobileMenuOpen && (showNavItems || showLogout) && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="md:hidden overflow-hidden bg-gray-900 border-b border-gray-800"
+            className="lg:hidden overflow-hidden bg-white border-t border-gray-200"
           >
-            <div className="space-y-1 px-4 py-4">
-              {navItems.map((item) => (
+            <div className="space-y-1 px-4 py-4 max-h-[calc(100vh-4rem)] overflow-y-auto">
+              {showNavItems && navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => {
                     setActiveTab && setActiveTab(item.id);
                     setIsMobileMenuOpen(false);
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-3 rounded-md text-base font-medium transition-colors ${
+                  aria-current={activeTab === item.id ? 'page' : undefined}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all ${
                     activeTab === item.id 
-                      ? 'bg-indigo-600/10 text-indigo-400' 
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                      ? 'bg-gray-900 text-white' 
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >
                   <item.icon className="w-5 h-5" />
@@ -152,19 +166,24 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab }) {
                 </button>
               ))}
               
-              <div className="border-t border-gray-800 my-2 pt-2">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-3 rounded-md text-base font-medium text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <LogOut className="w-5 h-5" />
-                  Logout
-                </button>
+              <div className="border-t border-gray-200 my-2 pt-2">
+                {showLogout && (
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-red-600 hover:bg-red-50 transition-all"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    Logout
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </nav>
+    </motion.nav>
   );
 }

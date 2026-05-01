@@ -112,8 +112,8 @@ export default function FacultyProfile() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading profile...</p>
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading profile...</p>
         </div>
       </div>
     );
@@ -121,9 +121,9 @@ export default function FacultyProfile() {
 
   if (!facultyData) {
     return (
-      <div className="bg-gray-900/30 border border-white/5 rounded-2xl p-12 text-center backdrop-blur-sm">
-        <User className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-400 mb-2">
+      <div className="bg-white border-2 border-gray-100 rounded-2xl p-12 text-center">
+        <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-700 mb-2">
           Faculty Profile Not Found
         </h3>
         <p className="text-gray-500">
@@ -136,22 +136,22 @@ export default function FacultyProfile() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Profile Header */}
-      <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/20 rounded-2xl p-6 backdrop-blur-sm">
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-indigo-500/20 rounded-xl flex items-center justify-center border border-indigo-500/30">
-            <User className="w-8 h-8 text-indigo-400" />
+          <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center border border-blue-200">
+            <User className="w-8 h-8 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-white mb-1">
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">
               {facultyData.faculty_name}
             </h2>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
               <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
                 {facultyData.faculty_code}
               </span>
               <span>{facultyData.designation || 'Faculty'}</span>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs">
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs">
                 {facultyData.role}
               </span>
             </div>
@@ -160,13 +160,13 @@ export default function FacultyProfile() {
       </div>
 
       {/* Availability Settings */}
-      <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-8 backdrop-blur-sm">
+      <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <Clock className="w-6 h-6 text-indigo-400" />
-            <h3 className="text-xl font-bold text-white">Daily Availability</h3>
+            <Clock className="w-6 h-6 text-blue-600" />
+            <h3 className="text-xl font-bold text-gray-900">Daily Availability</h3>
           </div>
-          <p className="text-gray-400 text-sm">
+          <p className="text-gray-600 text-sm">
             Set your preferred working hours. This will be used for timetable scheduling.
           </p>
         </div>
@@ -174,7 +174,7 @@ export default function FacultyProfile() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
+              <label className="text-sm font-medium text-gray-700">
                 Preferred Start Time *
               </label>
               <input
@@ -185,15 +185,15 @@ export default function FacultyProfile() {
                 min="08:00"
                 max="18:00"
                 required
-                className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-3 px-4 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                className="w-full bg-white border-2 border-gray-300 rounded-lg py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
               <p className="text-xs text-gray-500">
-                Earliest time you're available (08:00 - 18:00)
+                Earliest time you&apos;re available (08:00 - 18:00)
               </p>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">
+              <label className="text-sm font-medium text-gray-700">
                 Preferred End Time *
               </label>
               <input
@@ -204,35 +204,35 @@ export default function FacultyProfile() {
                 min="08:00"
                 max="18:00"
                 required
-                className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-3 px-4 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                className="w-full bg-white border-2 border-gray-300 rounded-lg py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
               <p className="text-xs text-gray-500">
-                Latest time you're available (08:00 - 18:00)
+                Latest time you&apos;re available (08:00 - 18:00)
               </p>
             </div>
           </div>
 
           {/* Current Settings Display */}
-          <div className="bg-gray-950/50 border border-gray-700 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3">Current Settings</h4>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Current Settings</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-500">Max Load per Week:</span>
-                <span className="ml-2 text-white font-medium">{facultyData.max_load_per_week} hours</span>
+                <span className="ml-2 text-gray-900 font-medium">{facultyData.max_load_per_week} hours</span>
               </div>
               <div>
                 <span className="text-gray-500">Working Days:</span>
-                <span className="ml-2 text-white font-medium">
+                <span className="ml-2 text-gray-900 font-medium">
                   {facultyData.min_working_days} - {facultyData.max_working_days} days
                 </span>
               </div>
               <div>
                 <span className="text-gray-500">Priority Level:</span>
-                <span className="ml-2 text-white font-medium">{facultyData.priority_level}</span>
+                <span className="ml-2 text-gray-900 font-medium">{facultyData.priority_level}</span>
               </div>
               <div>
                 <span className="text-gray-500">Status:</span>
-                <span className={`ml-2 font-medium ${facultyData.is_active ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`ml-2 font-medium ${facultyData.is_active ? 'text-green-600' : 'text-red-600'}`}>
                   {facultyData.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
@@ -242,7 +242,7 @@ export default function FacultyProfile() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? (
               <>
@@ -260,12 +260,12 @@ export default function FacultyProfile() {
       </div>
 
       {/* Info Box */}
-      <div className="bg-blue-900/20 border border-blue-500/20 rounded-xl p-4 backdrop-blur-sm">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <div className="flex gap-3">
-          <Clock className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-200">
+          <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
             <p className="font-semibold mb-1">About Availability Times</p>
-            <p className="text-blue-300/80">
+            <p className="text-blue-700">
               Your preferred start and end times help the system schedule your classes within your available hours. 
               The timetable generator will respect these preferences when creating schedules.
             </p>
@@ -274,11 +274,11 @@ export default function FacultyProfile() {
       </div>
 
       {/* Password Reset Section */}
-      <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-8 backdrop-blur-sm">
+      <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
         <div className="mb-6">
-          <h3 className="text-xl font-bold text-white mb-2">Password Management</h3>
-          <p className="text-gray-400 text-sm">
-            Change your password or reset it if you've forgotten it
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Password Management</h3>
+          <p className="text-gray-600 text-sm">
+            Change your password or reset it if you&apos;ve forgotten it
           </p>
         </div>
         <PasswordReset userEmail={facultyData.email} />

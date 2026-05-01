@@ -154,33 +154,33 @@ export default function AddDivision() {
   };
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="p-6 space-y-8 bg-white border-2 border-gray-100 rounded-2xl">
       {/* Add Division Section */}
       <div className="max-w-3xl mx-auto">
        <div className="mb-8 text-center">
-        <div className="mx-auto w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
-            <PlusCircle className="w-6 h-6 text-green-400" />
+        <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4 border-2 border-green-200">
+            <PlusCircle className="w-6 h-6 text-green-600" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Add New Division</h2>
-        <p className="text-gray-400 mt-2">Create a new division and bulk upload student data.</p>
+        <h2 className="text-2xl font-bold text-gray-900">Add New Division</h2>
+        <p className="text-gray-600 mt-2">Create a new division and bulk upload student data.</p>
       </div>
 
-      <div className="bg-gray-900/50 p-8 rounded-2xl border border-gray-800 backdrop-blur-sm space-y-8">
+      <div className="bg-white p-8 rounded-2xl border-2 border-gray-100 space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Division Name</label>
+                <label className="text-sm font-medium text-gray-700">Division Name</label>
                 <input 
                     type="text" 
-                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
                     placeholder="e.g. SY-CSE-A"
                     value={divisionData.division_name}
                     onChange={(e) => setDivisionData({...divisionData, division_name: e.target.value})}
                 />
             </div>
             <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Department</label>
+                <label className="text-sm font-medium text-gray-700">Department</label>
                  <select 
-                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
                     value={divisionData.department_id}
                     onChange={(e) => setDivisionData({...divisionData, department_id: e.target.value})}
                 >
@@ -193,9 +193,9 @@ export default function AddDivision() {
                 </select>
             </div>
             <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Academic Year</label>
+                <label className="text-sm font-medium text-gray-700">Academic Year</label>
                 <select 
-                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
                     value={divisionData.year}
                     onChange={(e) => setDivisionData({...divisionData, year: e.target.value})}
                 >
@@ -205,10 +205,10 @@ export default function AddDivision() {
                 </select>
             </div>
             <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Student Count</label>
+                <label className="text-sm font-medium text-gray-700">Student Count</label>
                 <input 
                     type="number" 
-                    className="w-full bg-gray-950/50 border border-gray-700 rounded-lg py-2.5 px-4 text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-white border-2 border-gray-200 rounded-lg py-2.5 px-4 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
                     placeholder="60"
                     value={divisionData.student_count}
                     onChange={(e) => setDivisionData({...divisionData, student_count: parseInt(e.target.value) || 0})}
@@ -218,8 +218,8 @@ export default function AddDivision() {
 
         <div className="space-y-4">
             <div className="flex justify-between items-center">
-                 <label className="text-sm font-medium text-gray-300">Upload Student Data (CSV)</label>
-                 <span className="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">Auto-generates Student IDs</span>
+                 <label className="text-sm font-medium text-gray-700">Upload Student Data (CSV)</label>
+                 <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded border-2 border-blue-100">Auto-generates Student IDs</span>
             </div>
            
             <div 
@@ -227,27 +227,27 @@ export default function AddDivision() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                    isDragging ? 'border-indigo-500 bg-indigo-500/10' : 'border-gray-700 hover:border-gray-600 bg-gray-950/30'
+                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400 bg-gray-50'
                 }`}
             >
                 {file ? (
                     <div className="flex flex-col items-center">
                         <CheckCircle className="w-10 h-10 text-green-500 mb-3" />
-                        <p className="text-white font-medium">{file.name}</p>
+                        <p className="text-gray-900 font-medium">{file.name}</p>
                         <p className="text-gray-500 text-sm mt-1">Ready for upload</p>
                         <button 
                             onClick={() => setFile(null)}
-                            className="mt-4 text-sm text-red-400 hover:text-red-300"
+                            className="mt-4 text-sm text-red-500 hover:text-red-700 font-medium"
                         >
                             Remove file
                         </button>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center">
-                        <Upload className="w-10 h-10 text-gray-500 mb-3" />
-                        <p className="text-gray-300">Drag and drop your CSV file here</p>
-                        <p className="text-gray-500 text-sm mt-1">or</p>
-                        <label className="mt-3 cursor-pointer inline-flex items-center px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors">
+                        <Upload className="w-10 h-10 text-gray-400 mb-3" />
+                        <p className="text-gray-600">Drag and drop your CSV file here</p>
+                        <p className="text-gray-400 text-sm mt-1">or</p>
+                        <label className="mt-3 cursor-pointer inline-flex items-center px-4 py-2 border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-colors bg-white">
                             <span>Browse Files</span>
                             <input type="file" className="hidden" accept=".csv" onChange={handleFileChange} />
                         </label>
@@ -255,8 +255,8 @@ export default function AddDivision() {
                 )}
             </div>
             
-            <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
-                <FileText className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 text-sm text-gray-600 bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
+                <FileText className="w-5 h-5 shrink-0 mt-0.5 text-gray-400" />
                 <p>CSV should contain columns: Name/Student Name, Email, PRN/PRN Number. Student password will be set to PRN, and users will be linked to this selected division and department.</p>
             </div>
         </div>
@@ -264,7 +264,7 @@ export default function AddDivision() {
         <button 
             onClick={handleSubmit}
             disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-green-500/20 transition-all disabled:opacity-50"
+            className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 rounded-lg transition-all disabled:opacity-50"
         >
             {loading ? 'Processing...' : 'Create Division & Import Students'}
         </button>
@@ -274,21 +274,21 @@ export default function AddDivision() {
       {/* View Divisions Section */}
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <UsersIcon className="w-7 h-7 text-indigo-400" />
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <UsersIcon className="w-7 h-7 text-blue-600" />
             All Divisions
           </h2>
-          <p className="text-gray-400 mt-1">View and manage existing divisions</p>
+          <p className="text-gray-600 mt-1">View and manage existing divisions</p>
         </div>
 
         {loadingDivisions ? (
           <div className="flex items-center justify-center py-12">
-            <div className="text-gray-400">Loading divisions...</div>
+            <div className="text-gray-500">Loading divisions...</div>
           </div>
         ) : divisions.length === 0 ? (
-          <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-12 text-center backdrop-blur-sm">
-            <UsersIcon className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-400 mb-2">No Divisions Found</h3>
+          <div className="bg-white border-2 border-gray-100 rounded-2xl p-12 text-center">
+            <UsersIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Divisions Found</h3>
             <p className="text-gray-500">Create your first division above to get started.</p>
           </div>
         ) : (
@@ -296,31 +296,31 @@ export default function AddDivision() {
             {divisions.map((division) => (
               <div
                 key={division.division_id}
-                className="bg-gray-900/50 border border-gray-800 rounded-xl p-5 backdrop-blur-sm hover:border-indigo-500/30 transition-all duration-200"
+                className="bg-white border-2 border-gray-100 rounded-xl p-5 hover:border-blue-300 transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-lg font-semibold text-white mb-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
                       {division.division_name}
                     </h3>
-                    <p className="text-sm text-gray-400">{division.year}</p>
+                    <p className="text-sm text-gray-500">{division.year}</p>
                   </div>
                 </div>
 
-                <div className="space-y-2 mb-4 text-sm">
-                  <div className="flex justify-between text-gray-400">
+                <div className="space-y-2 mb-4 text-sm bg-gray-50 p-3 rounded-lg border-2 border-gray-100">
+                  <div className="flex justify-between text-gray-600">
                     <span>Students:</span>
-                    <span className="text-white font-semibold">{division.student_count}</span>
+                    <span className="text-gray-900 font-semibold">{division.student_count}</span>
                   </div>
-                  <div className="flex justify-between text-gray-400">
+                  <div className="flex justify-between text-gray-600">
                     <span>Working Days:</span>
-                    <span className="text-white">{division.min_working_days}-{division.max_working_days}</span>
+                    <span className="text-gray-900">{division.min_working_days}-{division.max_working_days}</span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setSelectedDivision(division)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-lg font-medium transition-colors border border-indigo-500/30"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-900 rounded-lg font-medium transition-colors border-2 border-gray-200 hover:border-gray-300"
                 >
                   <Eye className="w-4 h-4" />
                   View Students
