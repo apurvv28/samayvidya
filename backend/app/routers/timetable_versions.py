@@ -21,6 +21,77 @@ def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
     return settings.allow_anonymous_api and current_user.aud == "anonymous"
 
 
+def _notify_users_for_timetable_approval(
+    supabase,
+    *,
+    department_id: str | None,
+    wef_date: str | None,
+    to_date: str | None,
+) -> None:
+    """Notify faculty and students when HOD approves timetable."""
+    for role in ("FACULTY", "STUDENT"):
+        query = supabase.table("user_profiles").select("email").eq("role", role)
+        if department_id:
+            query = query.eq("department_id", department_id)
+        users = query.execute().data or []
+        rows = []
+        for user in users:
+            email = (user.get("email") or "").strip()
+            if not email:
+                continue
+            rows.append(
+                {
+                    "notification_type": "TIMETABLE_APPROVED",
+                    "recipient_email": email,
+                    "recipient_type": role,
+                    "subject": "New Timetable Approved",
+                    "body": (
+                        f"The timetable has been approved by HOD and is active "
+                        f"for {wef_date or 'N/A'} to {to_date or 'N/A'}."
+                    ),
+                    "status": "SENT",
+                }
+            )
+        if rows:
+            supabase.table("notification_log").insert(rows).execute()
+
+    # Fallback: include students from students table if user_profiles lacks student emails.
+    student_query = supabase.table("students").select("email")
+    if department_id:
+        division_rows = (
+            supabase.table("divisions")
+            .select("division_id")
+            .eq("department_id", department_id)
+            .execute()
+            .data
+            or []
+        )
+        division_ids = [row.get("division_id") for row in division_rows if row.get("division_id")]
+        if division_ids:
+            student_query = student_query.in_("division_id", division_ids)
+    student_rows = student_query.execute().data or []
+    fallback_rows = []
+    for student in student_rows:
+        email = (student.get("email") or "").strip()
+        if not email:
+            continue
+        fallback_rows.append(
+            {
+                "notification_type": "TIMETABLE_APPROVED",
+                "recipient_email": email,
+                "recipient_type": "STUDENT",
+                "subject": "New Timetable Approved",
+                "body": (
+                    f"The timetable has been approved by HOD and is active "
+                    f"for {wef_date or 'N/A'} to {to_date or 'N/A'}."
+                ),
+                "status": "SENT",
+            }
+        )
+    if fallback_rows:
+        supabase.table("notification_log").insert(fallback_rows).execute()
+
+
 def _split_reason_and_meta(reason: str | None) -> tuple[str | None, dict]:
     if not reason:
         return reason, {}
@@ -479,6 +550,17 @@ async def approve_timetable_version(
                         print(f"Failed to send coordinator notification: {e}")
         except Exception as e:
             print(f"Failed to notify coordinators: {e}")
+
+        # Notify all students and faculty after approval
+        try:
+            _notify_users_for_timetable_approval(
+                supabase,
+                department_id=dept_id,
+                wef_date=wef_date,
+                to_date=to_date,
+            )
+        except Exception as e:
+            print(f"Failed to notify faculty/students about approval: {e}")
         
         return {
             "data": _hydrate_version_row(response.data[0] if response.data else {}),
