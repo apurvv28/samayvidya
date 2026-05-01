@@ -165,6 +165,72 @@ def _get_students_for_division(division_id: str):
     return students_response.data or []
 
 
+def _get_students_for_divisions(division_ids: list[str]) -> list[dict]:
+    """Get all students for given division ids (user_profiles first, students table fallback)."""
+    if not division_ids:
+        return []
+    supabase = get_service_supabase()
+    profile_rows = (
+        supabase.table("user_profiles")
+        .select("email, division")
+        .eq("role", "STUDENT")
+        .in_("division", division_ids)
+        .execute()
+        .data
+        or []
+    )
+    student_rows = (
+        supabase.table("students")
+        .select("email, division_id")
+        .in_("division_id", division_ids)
+        .execute()
+        .data
+        or []
+    )
+
+    merged: dict[str, dict] = {}
+    for row in profile_rows:
+        email = (row.get("email") or "").strip().lower()
+        if email:
+            merged[email] = {"email": email, "division": row.get("division")}
+    for row in student_rows:
+        email = (row.get("email") or "").strip().lower()
+        if email and email not in merged:
+            merged[email] = {"email": email, "division": row.get("division_id")}
+    return list(merged.values())
+
+
+def _create_bulk_notifications(
+    supabase,
+    recipients: list[dict],
+    *,
+    notification_type: str,
+    recipient_type: str,
+    subject: str,
+    body: str,
+    related_leave_id: str | None = None,
+) -> None:
+    """Insert notification_log rows for many recipients, skipping empty emails."""
+    rows = []
+    for recipient in recipients or []:
+        email = (recipient.get("email") or "").strip()
+        if not email:
+            continue
+        rows.append(
+            {
+                "notification_type": notification_type,
+                "recipient_email": email,
+                "recipient_type": recipient_type,
+                "subject": subject,
+                "body": body,
+                "related_leave_id": related_leave_id,
+                "status": "SENT",
+            }
+        )
+    if rows:
+        supabase.table("notification_log").insert(rows).execute()
+
+
 @router.get("", response_model=SuccessResponse)
 async def list_faculty_leaves(
     status: str | None = None,
@@ -403,17 +469,18 @@ async def update_faculty_leave(
             body = f"Your leave request from {leave_data.get('start_date')} to {leave_data.get('end_date')} has been rejected. Reason: {leave.rejection_reason or 'Not specified'}"
         
         # Log notification
-        supabase.table("notification_log").insert({
-            "notification_type": notification_type,
-            "recipient_email": faculty_email,
-            "recipient_type": "FACULTY",
-            "subject": subject,
-            "body": body,
-            "related_leave_id": leave_id,
-            "status": "SENT"
-        }).execute()
+        _create_bulk_notifications(
+            supabase,
+            [{"email": faculty_email}],
+            notification_type=notification_type,
+            recipient_type="FACULTY",
+            subject=subject,
+            body=body,
+            related_leave_id=leave_id,
+        )
         
         # If approved, notify coordinators about potential slot adjustments
+        notified_students_count = 0
         if leave.status.value == "APPROVED":
             try:
                 dept_id = faculty_info.get("department_id")
@@ -439,12 +506,89 @@ async def update_faculty_leave(
                                 }).execute()
                             except Exception as e:
                                 print(f"Failed to send coordinator notification: {e}")
+
+                    # Notify all faculty in department
+                    faculty_users = (
+                        supabase.table("user_profiles")
+                        .select("email")
+                        .eq("department_id", dept_id)
+                        .eq("role", "FACULTY")
+                        .execute()
+                        .data
+                        or []
+                    )
+                    _create_bulk_notifications(
+                        supabase,
+                        faculty_users,
+                        notification_type="FACULTY_LEAVE_APPROVED_BROADCAST",
+                        recipient_type="FACULTY",
+                        subject="Faculty Leave Approved",
+                        body=(
+                            f"{faculty_name}'s leave from {leave_data.get('start_date')} "
+                            f"to {leave_data.get('end_date')} has been approved by HOD."
+                        ),
+                        related_leave_id=leave_id,
+                    )
             except Exception as e:
                 print(f"Failed to notify coordinators: {e}")
+
+            # Student notifications must not depend on department_id being present.
+            try:
+                affected_entries = _get_affected_timetable_entries(
+                    faculty_id=leave_data.get("faculty_id"),
+                    start_date=leave_data.get("start_date"),
+                    end_date=leave_data.get("end_date"),
+                    leave_type=leave_data.get("leave_type"),
+                )
+                affected_division_ids = sorted(
+                    {
+                        str(entry.get("division_id"))
+                        for entry in affected_entries
+                        if entry.get("division_id")
+                    }
+                )
+                # Fallback: if date-range filter yields no entries, notify divisions
+                # where the faculty is assigned in the current timetable.
+                if not affected_division_ids:
+                    fallback_entries = (
+                        supabase.table("timetable_entries")
+                        .select("division_id")
+                        .eq("faculty_id", leave_data.get("faculty_id"))
+                        .execute()
+                        .data
+                        or []
+                    )
+                    affected_division_ids = sorted(
+                        {
+                            str(entry.get("division_id"))
+                            for entry in fallback_entries
+                            if entry.get("division_id")
+                        }
+                    )
+
+                student_users = _get_students_for_divisions(affected_division_ids)
+                notified_students_count = len([u for u in student_users if (u.get("email") or "").strip()])
+                _create_bulk_notifications(
+                    supabase,
+                    student_users,
+                    notification_type="FACULTY_LEAVE_APPROVED_BROADCAST",
+                    recipient_type="STUDENT",
+                    subject="Faculty Leave Update",
+                    body=(
+                        f"{faculty_name} is on approved leave from {leave_data.get('start_date')} "
+                        f"to {leave_data.get('end_date')}. Please check any class updates."
+                    ),
+                    related_leave_id=leave_id,
+                )
+            except Exception as e:
+                print(f"Failed to notify students for approved leave {leave_id}: {e}")
         
         return {
             "data": response.data,
-            "message": f"Faculty leave {leave.status.value.lower()} successfully. Email notification sent.",
+            "message": (
+                f"Faculty leave {leave.status.value.lower()} successfully. "
+                f"Email notification sent. Student notifications: {notified_students_count}."
+            ),
         }
     except HTTPException:
         raise
