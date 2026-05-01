@@ -1,0 +1,75 @@
+# SamayVidya - Deployment & Development Plan
+
+## 1. Project Context & Architecture
+
+### Introduction
+SamayVidya is a comprehensive timetable generation and management system designed for educational institutions. It automates the complex task of scheduling classes, labs, and faculty assignments while strictly adhering to various constraints (like 8-hour workday limits, parallel lab sessions, etc.). 
+
+### Architecture
+- **Frontend**: Next.js (React), Tailwind CSS, deployed on Vercel.
+- **Backend**: FastAPI (Python), deployed on a free-tier hosting service (e.g., Render, Render, or Railway).
+- **Database**: Supabase (PostgreSQL) for relational data storage and real-time features.
+- **AI/Agent System**: Bedrock Nova Pro is used to intelligently orchestrate and conflict-check the timetables. Agents manage load distribution, detect conflicts, and generate schedules ensuring all constraints are met.
+- **Authentication**: role-based access control (HOD, Coordinator, Faculty, Student) integrated with Supabase Auth.
+
+### Key Features
+- **Automated Timetable Generation**: AI-driven generation of theory and lab sessions considering room availability, faculty load, and student batches.
+- **Strict Constraints Handling**: 
+  - Maximum 8-hour workday per faculty/student.
+  - 3-batch lab strict parallelization.
+  - Theory room pairing and conflict resolution.
+- **Role-Based Dashboards**: Customized UI for HODs, Coordinators, Faculty, and Students.
+- **Manual Adjustments (Slot Adjustments)**: Coordinators can manually adjust slots with a hard-conflict guard preventing invalid schedules.
+- **Load Management**: Analytics and agents distributing required workload among faculties.
+- **PDF Export**: Generate branded "SamayVidya" PDFs for divisions and faculties.
+
+---
+
+## 2. Development to Production Deployment Plan (AWS Centric)
+
+### Phase 1: Preparation & Pre-Deployment (Local/Staging)
+1. **Environment Variables Check**: Ensure all `.env` files (both frontend and backend) are separated into `.env.development` and `.env.production`.
+2. **Database Migration to AWS**: 
+   - **Option A (Keep Supabase Cloud)**: Continue using Supabase's hosted free tier (up to 500MB DB).
+   - **Option B (Migrate to AWS RDS)**: Migrate to AWS RDS for PostgreSQL (db.t3.micro or db.t4g.micro free tier). *Note: Supabase provides built-in Auth and Realtime features. If you migrate the raw DB to RDS, you will either need to self-host the entire Supabase stack on an EC2 instance (which might exceed the 1GB RAM limit of a free tier t2.micro) or rewrite authentication logic.*
+3. **Backend Optimization**: 
+   - Update `requirements.txt` / dependencies.
+   - Test Dockerfile locally to ensure the FastAPI app runs correctly inside a container.
+   - Configure CORS in FastAPI to only accept requests from the production Vercel domain.
+4. **Frontend Optimization**: 
+   - Run `npm run build` locally to catch any build-time errors.
+   - Ensure API endpoints point to the new AWS EC2 domain/IP using environment variables (`NEXT_PUBLIC_API_URL`).
+
+### Phase 2: Backend Deployment (AWS Free Tier)
+1. **Provision EC2 Instance**: 
+   - Launch a `t2.micro` or `t3.micro` EC2 instance (free tier eligible for 12 months, 750 hours/month) running Ubuntu or Amazon Linux.
+   - Configure Security Groups to allow inbound traffic on port 80 (HTTP), 443 (HTTPS), and 22 (SSH).
+2. **Deploy via Docker on EC2**:
+   - SSH into the EC2 instance, install Docker and Docker Compose.
+   - Clone your GitHub repository onto the instance.
+   - Set up your `.env` file with AWS RDS/Supabase credentials, Bedrock/AWS tokens, etc.
+   - Run `docker-compose up -d --build` to start the FastAPI backend.
+3. **Domain & SSL (Nginx/Certbot)**:
+   - Install Nginx as a reverse proxy to route port 80 to your FastAPI internal port (e.g., 8000).
+   - Use Certbot (Let's Encrypt) to secure the backend with a free SSL certificate (essential for Vercel frontend to communicate securely via HTTPS).
+
+### Phase 3: Frontend Deployment (Vercel)
+1. **Connect to Vercel**: Import the GitHub repository into Vercel.
+2. **Configure Build Settings**:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: `ui/`
+   - **Build Command**: `npm run build`
+3. **Environment Variables**: Add all required `NEXT_PUBLIC_*` variables (Supabase URL, Anon Key, Backend API URL) via the Vercel dashboard.
+4. **Deploy**: Trigger the initial production deployment.
+5. **Domain Mapping (Optional)**: Map a custom domain to the Vercel project if applicable.
+
+### Phase 4: Post-Deployment Testing & Monitoring
+1. **End-to-End Testing**:
+   - Log in as HOD/Coordinator.
+   - Trigger the timetable generation agent on the production environment.
+   - Verify manual adjustments are working and conflict guards are active.
+   - Generate and download a PDF to ensure the document generation service functions correctly in the cloud.
+2. **Monitoring**:
+   - Monitor backend logs on Render/Railway for any memory limit issues (free tiers usually have a 512MB RAM limit, which the AI agents might hit during intensive tasks).
+   - Set up simple uptime monitoring (e.g., UptimeRobot) for the backend to prevent free tier spin-down/cold starts.
+3. **Scaling Strategy (Future)**: Keep an eye on agent execution times. If free tier timeouts occur (e.g., 60 seconds on serverless or low resources), consider shifting the generative tasks to background workers (Celery/Redis) or upgrading to a paid tier.
