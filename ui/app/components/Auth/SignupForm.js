@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Lock, ArrowRight, Phone, Building2, Loader2 } from 'lucide-react';
+import { User, Mail, Lock, ArrowRight, Phone, Building2, Loader2, Sparkles } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -91,49 +91,51 @@ export default function SignupForm({ onFlip }) {
 
   return (
     <div className="w-full h-full relative group">
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-indigo-500 rounded-2xl opacity-75 blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-        <div className="relative w-full h-full bg-gray-900 border border-white/10 rounded-2xl p-8 flex flex-col justify-center shadow-2xl backdrop-blur-xl">
+        <div className="relative w-full h-full bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 flex flex-col justify-center shadow-xl">
             
-            <div className="mb-6 text-center">
-                <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 mb-2">Create Your Department</h2>
-                <p className="text-gray-400 text-sm">Register as a coordinator and set up your department</p>
+            <div className="mb-4 text-center">
+                <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-normal text-gray-900 mb-1" style={{ fontFamily: '"Times New Roman", Times, serif' }}>Create Your Department</h2>
+                <p className="text-gray-600 text-xs">Register as a coordinator and set up your department</p>
             </div>
 
             {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center">
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs text-center">
                     {error}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Full Name</label>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Full Name</label>
                         <div className="relative group/input">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                             <input 
                             type="text" 
                             name="name"
                             required
                             value={formData.name}
                             onChange={handleChange}
-                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                             placeholder="John Doe"
                             />
                         </div>
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Phone</label>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Phone</label>
                         <div className="relative group/input">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                             <input 
                             type="tel" 
                             name="phone"
                             required
                             value={formData.phone}
                             onChange={handleChange}
-                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                             placeholder="+91 98765 43210"
                             />
                         </div>
@@ -141,31 +143,31 @@ export default function SignupForm({ onFlip }) {
                 </div>
 
                 <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Email Address</label>
+                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Email Address</label>
                 <div className="relative group/input">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                     <input 
                     type="email" 
                     name="email"
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                    className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                     placeholder="name@example.com"
                     />
                 </div>
                 </div>
 
                 {/* Department Creation Section */}
-                <div className="space-y-3 p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
+                <div className="space-y-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-2">
-                        <Building2 className="h-4 w-4 text-indigo-400" />
-                        <h3 className="text-sm font-semibold text-indigo-300">Department Information</h3>
+                        <Building2 className="h-4 w-4 text-blue-600" />
+                        <h3 className="text-sm font-semibold text-blue-700">Department Information</h3>
                     </div>
                     
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
-                            Department Name <span className="text-red-400">*</span>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">
+                            Department Name <span className="text-red-600">*</span>
                         </label>
                         <input
                             type="text"
@@ -174,12 +176,12 @@ export default function SignupForm({ onFlip }) {
                             onChange={handleChange}
                             required
                             placeholder="e.g., Computer Science & AI"
-                            className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                         />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
-                            Department Code <span className="text-red-400">*</span>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">
+                            Department Code <span className="text-red-600">*</span>
                         </label>
                         <input
                             type="text"
@@ -189,40 +191,40 @@ export default function SignupForm({ onFlip }) {
                             required
                             placeholder="e.g., CSAI"
                             maxLength={10}
-                            className="w-full bg-gray-950/60 border border-gray-700 rounded-xl py-2.5 px-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner uppercase"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all uppercase"
                         />
-                        <p className="text-xs text-gray-500 ml-1">Short code (max 10 characters, e.g., CS, CSAI, MECH)</p>
+                        <p className="text-[11px] text-gray-500 ml-1">Short code (max 10 characters, e.g., CS, CSAI, MECH)</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Password</label>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Password</label>
                         <div className="relative group/input">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                             <input 
                             type="password" 
                             name="password"
                             required
                             value={formData.password}
                             onChange={handleChange}
-                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                             placeholder="Create a password"
                             />
                         </div>
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Confirm Password</label>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Confirm Password</label>
                         <div className="relative group/input">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                             <input 
                             type="password" 
                             name="confirmPassword"
                             required
                             value={formData.confirmPassword}
                             onChange={handleChange}
-                            className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                            className="w-full bg-white border border-gray-300 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                             placeholder="Confirm password"
                             />
                         </div>
@@ -234,7 +236,7 @@ export default function SignupForm({ onFlip }) {
                 whileTap={{ scale: 0.98 }}
                 disabled={loading}
                 type="submit"
-                className="w-full relative overflow-hidden bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 group/btn mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full relative overflow-hidden bg-gray-900 hover:bg-gray-800 text-white font-bold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 group/btn mt-1 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                 <span className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover/btn:animate-shimmer" />
                 {loading ? (
@@ -247,12 +249,12 @@ export default function SignupForm({ onFlip }) {
                 </motion.button>
             </form>
 
-            <div className="mt-4 text-center pt-4 border-t border-white/5">
-                <p className="text-gray-500 text-sm">
+            <div className="mt-3 text-center pt-3 border-t border-gray-200">
+                <p className="text-gray-600 text-xs">
                 Already have an account?{' '}
                 <button 
                     onClick={onFlip}
-                    className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors hover:underline underline-offset-4"
+                    className="text-blue-600 hover:text-blue-700 font-semibold transition-colors hover:underline underline-offset-4"
                 >
                     Log in
                 </button>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ROLE_DASHBOARD } from '../../context/AuthContext';
 
@@ -83,32 +83,34 @@ export default function LoginForm({ onFlip }) {
 
   return (
     <div className="w-full h-full relative group">
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl opacity-75 blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-        <div className="relative w-full h-full bg-gray-900 border border-white/10 rounded-2xl p-8 flex flex-col justify-center shadow-2xl backdrop-blur-xl">
+        <div className="relative w-full h-full bg-white border border-gray-200 rounded-2xl p-6 sm:p-7 flex flex-col justify-center shadow-xl">
             
-            <div className="mb-8 text-center">
-                <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 mb-2">Welcome Back</h2>
-                <p className="text-gray-400 text-sm">Enter your credentials to access the portal</p>
+            <div className="mb-6 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <ShieldCheck className="w-6 h-6 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-normal text-gray-900 mb-2" style={{ fontFamily: '"Times New Roman", Times, serif' }}>Welcome Back</h2>
+                <p className="text-gray-600 text-sm">Enter your credentials to access the portal</p>
             </div>
 
             {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center">
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs text-center">
                     {error}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">Email Address</label>
+                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider ml-1">Email Address</label>
                 <div className="relative group/input">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                     <input 
                     type="email" 
                     name="email"
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                    className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                     placeholder="name@example.com"
                     />
                 </div>
@@ -116,18 +118,18 @@ export default function LoginForm({ onFlip }) {
 
                 <div className="space-y-1.5">
                     <div className="flex justify-between items-center px-1">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Password</label>
-                        <a href="#" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Forgot?</a>
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Password</label>
+                        <span className="text-xs text-gray-400">Secure input</span>
                     </div>
                 <div className="relative group/input">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/input:text-blue-600 transition-colors" />
                     <input 
                     type="password" 
                     name="password"
                     required
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full bg-gray-950/50 border border-gray-800 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+                    className="w-full bg-white border border-gray-300 rounded-xl py-2.5 pl-10 pr-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
                     placeholder="••••••••"
                     />
                 </div>
@@ -138,7 +140,7 @@ export default function LoginForm({ onFlip }) {
                 whileTap={{ scale: 0.98 }}
                 disabled={loading}
                 type="submit"
-                className="w-full relative overflow-hidden bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 group/btn disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full relative overflow-hidden bg-gray-900 hover:bg-gray-800 text-white font-bold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 group/btn disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                 <span className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover/btn:animate-shimmer" />
                 {loading ? (
@@ -153,21 +155,21 @@ export default function LoginForm({ onFlip }) {
 
             {onFlip ? (
               <>
-                <div className="mt-6 relative">
+                <div className="mt-5 relative">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-800"></div>
+                    <div className="w-full border-t border-gray-200"></div>
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-gray-900 text-gray-500">or</span>
+                    <span className="px-2 bg-white text-gray-500">or</span>
                   </div>
                 </div>
 
-                <div className="mt-6 text-center">
-                  <p className="text-gray-500 text-sm">
+                <div className="mt-5 text-center">
+                  <p className="text-gray-600 text-xs">
                     Don&apos;t have an account?{' '}
                     <button 
                       onClick={onFlip}
-                      className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors hover:underline underline-offset-4"
+                      className="text-blue-600 hover:text-blue-700 font-semibold transition-colors hover:underline underline-offset-4"
                     >
                       Sign up
                     </button>

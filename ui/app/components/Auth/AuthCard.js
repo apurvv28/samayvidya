@@ -9,7 +9,7 @@ export default function AuthCard() {
   const [isFlipped, setIsFlipped] = useState(false);
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto h-[650px]" style={{ perspective: '1000px' }}>
+    <div className="relative w-full max-w-[700px] mx-auto h-[680px]" style={{ perspective: '1000px' }}>
       <motion.div
         className="relative w-full h-full"
         initial={false}
@@ -18,7 +18,7 @@ export default function AuthCard() {
         style={{ transformStyle: 'preserve-3d' }}
       >
         {/* Front Face - Login */}
-        <div style={{ backfaceVisibility: 'hidden', position: 'absolute', width: '100%', height: '90%', marginTop: '30px' }}>
+        <div style={{ backfaceVisibility: 'hidden', position: 'absolute', width: '100%', height: '100%' }}>
           <LoginForm onFlip={() => setIsFlipped(true)} />
         </div>
 
