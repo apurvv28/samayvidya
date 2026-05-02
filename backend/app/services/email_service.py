@@ -233,6 +233,40 @@ def send_slot_covered_notification(to_email: str, student_name: str, original_fa
     return _send_email(to_email, subject, html_content)
 
 
+def send_revised_timetable_update_email(
+    to_email: str,
+    student_name: str,
+    leave_date: str,
+    update_lines: list[str],
+) -> bool:
+    """Send revised day timetable updates to student."""
+    rows_html = "".join(f"<li>{line}</li>" for line in (update_lines or []))
+    if not rows_html:
+        rows_html = "<li>No revised slots for your division.</li>"
+    subject = f"Revised Day Timetable - {leave_date}"
+    html_content = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+                <h2 style="color: #0d6efd;">Revised Day Timetable</h2>
+                <p>Dear {student_name},</p>
+                <p>Please review the updated timetable for <strong>{leave_date}</strong>.</p>
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <ul style="padding-left: 18px; margin: 0;">
+                        {rows_html}
+                    </ul>
+                </div>
+                <p>Slots without accepted replacement are marked as <strong>FREE SLOT</strong>.</p>
+                <br>
+                <p>Best regards,</p>
+                <p><strong>Academic Administration</strong></p>
+            </div>
+        </body>
+    </html>
+    """
+    return _send_email(to_email, subject, html_content)
+
+
 def _send_email(to_email: str, subject: str, html_content: str) -> bool:
     """Internal helper to send email."""
     message = MIMEMultipart()

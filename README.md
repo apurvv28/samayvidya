@@ -1272,9 +1272,9 @@ Experimental results on real-world university data (6 divisions, 12 faculty, 18 
 | Name | Role | Responsibilities |
 |------|------|------------------|
 | **Apurv Saktepar** | Lead Developer & Architect | System design, agent orchestration, backend development |
-| **Vedant Bhakare** | Frontend Developer | React/Next.js UI, dashboard components, PDF generation |
+| **Nisha Pragane** | Frontend Developer | React/Next.js UI, dashboard components, PDF generation |
 | **Anushka Salvi** | AI/ML Engineer | LLM integration, conflict detection algorithms |
-| **Nisha Pragane** | Database Architect | Schema design, RLS policies, query optimization |
+| **Vedant Bhakare** | Database Architect | Schema design, RLS policies, query optimization |
 
 ### Faculty Advisor
 

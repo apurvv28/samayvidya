@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { GraduationCap, Loader2, CheckCircle2, Building2, Users, Bell, Clock, BookOpen, Calendar, LogOut } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const DAY_TABLE_MARKER = '__DAY_TABLE__:';
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function StudentDashboard() {
 
   const navItems = [
     { id: 'timetable', label: 'Timetable', icon: Calendar },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'updates', label: 'Updates', icon: Bell },
   ];
 
   const handleLogout = async () => {
@@ -29,67 +30,80 @@ export default function StudentDashboard() {
     router.push('/');
   };
   
-  // Mock notifications
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: 'Timetable Updated',
-      message: 'Your division timetable has been updated for this semester.',
-      type: 'info',
-      date: '2026-04-28',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'Faculty Leave Notification',
-      message: 'Dr. CDK will be on leave on May 5th. Class will be rescheduled.',
-      type: 'warning',
-      date: '2026-04-27',
-      read: false,
-    },
-    {
-      id: 3,
-      title: 'Exam Schedule Released',
-      message: 'Mid-semester exam schedule has been published. Check your timetable.',
-      type: 'success',
-      date: '2026-04-25',
-      read: true,
-    },
-  ]);
+  const [updates, setUpdates] = useState([]);
+  const [loadingUpdates, setLoadingUpdates] = useState(false);
 
-  const markAsRead = (notificationId) => {
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      )
-    );
+  const markAsRead = async (notificationId) => {
+    try {
+      const token = localStorage.getItem('authToken') || '';
+      await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUpdates((prev) => prev.filter((item) => item.notification_id !== notificationId));
+    } catch (error) {
+      console.error('Failed to mark update as read:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('authToken') || '';
+      await fetch(`${API_BASE_URL}/notifications/mark-all-read?recipient_email=${encodeURIComponent(profile?.email || '')}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUpdates([]);
+    } catch (error) {
+      console.error('Failed to mark all updates as read:', error);
+    }
   };
 
   const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'success':
-        return <CheckCircle2 className="w-5 h-5 text-green-600" />;
-      case 'warning':
-        return <Bell className="w-5 h-5 text-amber-600" />;
-      default:
-        return <Bell className="w-5 h-5 text-teal-600" />;
-    }
+    if (type === 'REVISED_DAY_TIMETABLE') return <CheckCircle2 className="w-5 h-5 text-green-600" />;
+    if (type && type.includes('LEAVE')) return <Bell className="w-5 h-5 text-amber-600" />;
+    return <Bell className="w-5 h-5 text-teal-600" />;
   };
 
   const getNotificationBgColor = (type) => {
-    switch (type) {
-      case 'success':
-        return 'bg-green-50 border-green-200';
-      case 'warning':
-        return 'bg-amber-50 border-amber-200';
-      default:
-        return 'bg-teal-50 border-teal-200';
+    if (type === 'REVISED_DAY_TIMETABLE') return 'bg-green-50 border-green-200';
+    if (type && type.includes('LEAVE')) return 'bg-amber-50 border-amber-200';
+    return 'bg-teal-50 border-teal-200';
+  };
+
+  const parseDayTablePayload = (rawBody) => {
+    const body = String(rawBody || '');
+    if (!body.startsWith(DAY_TABLE_MARKER)) return null;
+    try {
+      const parsed = JSON.parse(body.slice(DAY_TABLE_MARKER.length));
+      if (!parsed || !Array.isArray(parsed.rows)) return null;
+      return parsed;
+    } catch (error) {
+      return null;
     }
   };
+
+  useEffect(() => {
+    const fetchUpdates = async () => {
+      if (!profile?.email) return;
+      try {
+        setLoadingUpdates(true);
+        const token = localStorage.getItem('authToken') || '';
+        const res = await fetch(
+          `${API_BASE_URL}/notifications?recipient_email=${encodeURIComponent(profile.email)}&limit=50`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setUpdates(data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch updates:', error);
+      } finally {
+        setLoadingUpdates(false);
+      }
+    };
+    fetchUpdates();
+  }, [profile?.email]);
 
   // Fetch student info from JWT token (division_id is already in profile)
   useEffect(() => {
@@ -267,7 +281,7 @@ export default function StudentDashboard() {
                     </div>
                   )}
 
-                  {activeTab === 'notifications' && (
+                  {activeTab === 'updates' && (
                     <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
@@ -275,13 +289,13 @@ export default function StudentDashboard() {
                             <Bell className="w-5 h-5 text-teal-600" />
                           </div>
                           <div>
-                            <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
+                            <h2 className="text-xl font-bold text-gray-900">Updates</h2>
                             <p className="text-sm text-gray-600">
-                              {notifications.filter((n) => !n.read).length} unread notifications
+                              {updates.length} unread updates
                             </p>
                           </div>
                         </div>
-                        {notifications.some((n) => !n.read) && (
+                        {updates.length > 0 && (
                           <button
                             onClick={markAllAsRead}
                             className="text-sm text-teal-600 hover:text-teal-700 transition-colors font-medium"
@@ -292,48 +306,84 @@ export default function StudentDashboard() {
                       </div>
 
                       <div className="space-y-3">
-                        {notifications.length === 0 ? (
+                        {loadingUpdates ? (
+                          <div className="text-center py-12">
+                            <Loader2 className="w-10 h-10 text-gray-300 animate-spin mx-auto mb-4" />
+                            <p className="text-gray-500">Loading updates...</p>
+                          </div>
+                        ) : updates.length === 0 ? (
                           <div className="text-center py-12">
                             <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                            <h3 className="text-lg font-semibold text-gray-600 mb-2">No Notifications</h3>
+                            <h3 className="text-lg font-semibold text-gray-600 mb-2">No Updates</h3>
                             <p className="text-gray-500">You&apos;re all caught up!</p>
                           </div>
                         ) : (
-                          notifications.map((notif) => (
+                          updates.map((notif) => (
                             <div
-                              key={notif.id}
-                              className={`p-4 rounded-xl border-2 transition-all ${
-                                notif.read ? 'bg-gray-50 border-gray-100' : `${getNotificationBgColor(notif.type)} hover:shadow-md`
-                              }`}
+                              key={notif.notification_id}
+                              className={`p-4 rounded-xl border-2 transition-all ${getNotificationBgColor(notif.notification_type)} hover:shadow-md`}
                             >
+                              {(() => {
+                                const tablePayload = parseDayTablePayload(notif.body);
+                                return (
                               <div className="flex items-start gap-4">
-                                <div className="shrink-0 mt-1">{getNotificationIcon(notif.type)}</div>
+                                <div className="shrink-0 mt-1">{getNotificationIcon(notif.notification_type)}</div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between gap-2 mb-1">
-                                    <h3 className={`font-semibold ${notif.read ? 'text-gray-600' : 'text-gray-900'}`}>
-                                      {notif.title}
+                                    <h3 className="font-semibold text-gray-900">
+                                      {notif.subject}
                                     </h3>
-                                    {!notif.read && <span className="shrink-0 w-2 h-2 bg-teal-600 rounded-full mt-2"></span>}
+                                    <span className="shrink-0 w-2 h-2 bg-teal-600 rounded-full mt-2"></span>
                                   </div>
-                                  <p className={`text-sm mb-2 ${notif.read ? 'text-gray-500' : 'text-gray-700'}`}>
-                                    {notif.message}
-                                  </p>
+                                  {tablePayload ? (
+                                    <div className="mb-2">
+                                      <p className="text-sm font-medium text-gray-800 mb-2">
+                                        {tablePayload.division_name} - {tablePayload.day_name}
+                                      </p>
+                                      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                                        <table className="min-w-full text-xs">
+                                          <thead className="bg-gray-100">
+                                            <tr>
+                                              <th className="text-left px-3 py-2 font-semibold text-gray-700">Time</th>
+                                              <th className="text-left px-3 py-2 font-semibold text-gray-700">Subject</th>
+                                              <th className="text-left px-3 py-2 font-semibold text-gray-700">Faculty/Slot</th>
+                                              <th className="text-left px-3 py-2 font-semibold text-gray-700">Status</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {tablePayload.rows.map((row, idx) => (
+                                              <tr key={`${notif.notification_id}-${idx}`} className="border-t border-gray-100">
+                                                <td className="px-3 py-2 text-gray-700">{row.time || '-'}</td>
+                                                <td className="px-3 py-2 text-gray-700">{row.subject || '-'}</td>
+                                                <td className="px-3 py-2 text-gray-700">{row.faculty || '-'}</td>
+                                                <td className="px-3 py-2 text-gray-700">{row.status || '-'}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm mb-2 text-gray-700">
+                                      {notif.body}
+                                    </p>
+                                  )}
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5 text-xs text-gray-500">
                                       <Clock className="w-3.5 h-3.5" />
-                                      {notif.date}
+                                      {new Date(notif.sent_at || notif.created_at || Date.now()).toLocaleString('en-IN')}
                                     </div>
-                                    {!notif.read && (
-                                      <button
-                                        onClick={() => markAsRead(notif.id)}
-                                        className="text-xs text-teal-600 hover:text-teal-700 transition-colors font-medium"
-                                      >
-                                        Mark as read
-                                      </button>
-                                    )}
+                                    <button
+                                      onClick={() => markAsRead(notif.notification_id)}
+                                      className="text-xs text-teal-600 hover:text-teal-700 transition-colors font-medium"
+                                    >
+                                      Mark as read
+                                    </button>
                                   </div>
                                 </div>
                               </div>
+                                );
+                              })()}
                             </div>
                           ))
                         )}

@@ -10,7 +10,7 @@ import RoleGuard from '../../components/RoleGuard';
 import { useAuth } from '../../context/AuthContext';
 import {
   CheckCircle2, Calendar, Users, BarChart3, AlertCircle,
-  FileText, Loader2, XCircle, Clock, Trash2, Check, X, LayoutDashboard, LogOut, UserCircle
+  FileText, Loader2, XCircle, Clock, Trash2, Check, X, LayoutDashboard, LogOut, UserCircle, ExternalLink
 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
@@ -235,6 +235,12 @@ export default function HODDashboard() {
   const pendingLeaves = allLeaves.filter(l => l.status === 'PENDING');
   const processedLeaves = allLeaves.filter(l => l.status !== 'PENDING');
 
+  const isPdfProof = (url) => String(url || '').toLowerCase().includes('.pdf');
+  const isImageProof = (url) => {
+    const value = String(url || '').toLowerCase();
+    return value.includes('.png') || value.includes('.jpg') || value.includes('.jpeg') || value.includes('.webp') || value.includes('.gif');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
@@ -419,6 +425,38 @@ export default function HODDashboard() {
                               {new Date(leave.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </div>
                             <p className="text-sm text-gray-600">{leave.reason}</p>
+                            {leave.proof_image_url && (
+                              <div className="mt-2 p-3 bg-white border border-yellow-300 rounded-lg">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-gray-700">Uploaded Proof</p>
+                                  <a
+                                    href={leave.proof_image_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800"
+                                  >
+                                    Open Link <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                </div>
+                                {isImageProof(leave.proof_image_url) ? (
+                                  <a href={leave.proof_image_url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={leave.proof_image_url}
+                                      alt="Leave proof"
+                                      className="mt-2 h-24 w-auto rounded border border-gray-200 object-cover"
+                                    />
+                                  </a>
+                                ) : isPdfProof(leave.proof_image_url) ? (
+                                  <p className="text-xs text-gray-600 mt-2">
+                                    PDF proof uploaded. Click <span className="font-semibold">Open Link</span> to view.
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-gray-600 mt-2 break-all">
+                                    {leave.proof_image_url}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                             {leave.created_at && (
                               <p className="text-xs text-gray-500">
                                 Submitted {new Date(leave.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -495,6 +533,38 @@ export default function HODDashboard() {
                               {new Date(leave.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </div>
                             <p className="text-sm text-gray-500">{leave.reason}</p>
+                            {leave.proof_image_url && (
+                              <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-gray-700">Uploaded Proof</p>
+                                  <a
+                                    href={leave.proof_image_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800"
+                                  >
+                                    Open Link <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                </div>
+                                {isImageProof(leave.proof_image_url) ? (
+                                  <a href={leave.proof_image_url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={leave.proof_image_url}
+                                      alt="Leave proof"
+                                      className="mt-2 h-20 w-auto rounded border border-gray-200 object-cover"
+                                    />
+                                  </a>
+                                ) : isPdfProof(leave.proof_image_url) ? (
+                                  <p className="text-xs text-gray-600 mt-2">
+                                    PDF proof uploaded. Click <span className="font-semibold">Open Link</span> to view.
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-gray-600 mt-2 break-all">
+                                    {leave.proof_image_url}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <button

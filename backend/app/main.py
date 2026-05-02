@@ -1,9 +1,11 @@
 """Main FastAPI application entry point."""
 import logging
 import sys
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 # Routers
 from app.routers import (
@@ -44,6 +46,11 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_UPLOADS_DIR = _BACKEND_ROOT / "uploads"
+_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
 
 # CORS Configuration
 app.add_middleware(

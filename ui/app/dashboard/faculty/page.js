@@ -49,11 +49,16 @@ export default function FacultyDashboard() {
   // Affected slots state
   const [affectedSlots, setAffectedSlots] = useState([]);
   const [loadingAffectedSlots, setLoadingAffectedSlots] = useState(false);
+  const [slotModal, setSlotModal] = useState({ open: false, leaveId: null, requestId: null, loading: false, slots: [] });
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [loadingIncoming, setLoadingIncoming] = useState(false);
+  const [assigningSlotId, setAssigningSlotId] = useState(null);
 
   const navItems = [
     { id: 'timetable', label: 'Timetable', icon: Calendar },
     { id: 'apply-leave', label: 'Apply Leave', icon: FilePlus },
     { id: 'my-leaves', label: 'My Leaves', icon: FileText },
+    { id: 'slot-adjustments', label: 'Slot Adjustments', icon: AlertCircle },
     { id: 'profile', label: 'Profile', icon: UserCircle },
   ];
 
@@ -152,13 +157,35 @@ export default function FacultyDashboard() {
     }
   }, [selectedFacultyId]);
 
-  // Fetch my leaves when tab switches or faculty changes
+  const fetchIncomingRequests = useCallback(async () => {
+    try {
+      setLoadingIncoming(true);
+      const token = localStorage.getItem('authToken') || '';
+      const query = selectedFacultyId ? `?faculty_id=${encodeURIComponent(selectedFacultyId)}` : '';
+      const res = await fetch(`${API_BASE_URL}/slot-adjustments/incoming-requests${query}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch incoming slot requests');
+      const data = await res.json();
+      setIncomingRequests(data.data || []);
+    } catch (err) {
+      setLeavesError(err.message);
+    } finally {
+      setLoadingIncoming(false);
+    }
+  }, [selectedFacultyId]);
+
+  // Fetch data when tab switches or faculty changes
   useEffect(() => {
     if (activeTab === 'my-leaves' && selectedFacultyId) {
       fetchMyLeaves();
-      fetchAffectedSlots();
     }
-  }, [activeTab, selectedFacultyId, fetchMyLeaves, fetchAffectedSlots]);
+    if (activeTab === 'slot-adjustments') {
+      fetchMyLeaves();
+      fetchAffectedSlots();
+      fetchIncomingRequests();
+    }
+  }, [activeTab, selectedFacultyId, fetchMyLeaves, fetchAffectedSlots, fetchIncomingRequests]);
 
   const handleFacultySelect = (e) => {
     const id = e.target.value;
@@ -175,9 +202,11 @@ export default function FacultyDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setLeaveError('Please upload an image file');
+    // Validate file type (image or PDF)
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf';
+    if (!isImage && !isPdf) {
+      setLeaveError('Please upload an image or PDF file');
       return;
     }
 
@@ -278,10 +307,10 @@ export default function FacultyDashboard() {
 
   const handleRequestAdjustment = async (leaveId) => {
     try {
-      setLeaveError(null);
+      setLeavesError(null);
       const token = localStorage.getItem('authToken') || '';
-      
-      // First, get affected slots
+      setSlotModal({ open: true, leaveId, requestId: null, loading: true, slots: [] });
+
       const affectedRes = await fetch(
         `${API_BASE_URL}/faculty-leaves/${leaveId}/affected-slots`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -290,17 +319,12 @@ export default function FacultyDashboard() {
       if (!affectedRes.ok) {
         throw new Error('Failed to fetch affected slots');
       }
-      
       const affectedData = await affectedRes.json();
-      const entryIds = (affectedData.data?.affected_entries || []).map(e => e.entry_id);
-      
-      if (entryIds.length === 0) {
-        setLeaveError('No timetable slots found for this leave period');
-        return;
-      }
-      
-      // Request adjustment
-      const adjustRes = await fetch(`${API_BASE_URL}/slot-adjustments/create`, {
+      const slots = affectedData.data?.affected_entries || [];
+      if (slots.length === 0) throw new Error('No affected slots found for this leave.');
+      const entryIds = slots.map((slot) => slot.entry_id);
+      let requestId = null;
+      const createRes = await fetch(`${API_BASE_URL}/slot-adjustments/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -311,22 +335,122 @@ export default function FacultyDashboard() {
           entry_ids: entryIds,
         }),
       });
-      
-      if (!adjustRes.ok) {
-        const err = await adjustRes.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to request adjustment');
+
+      if (createRes.ok) {
+        const createData = await createRes.json();
+        requestId = createData.data?.request_id;
+      } else {
+        const createErr = await createRes.json().catch(() => ({}));
+        const detail = String(createErr?.detail || '');
+        if (createRes.status === 409 || detail.toLowerCase().includes('already exists')) {
+          // Reuse existing request so user can reopen modal and edit assignments.
+          const listRes = await fetch(`${API_BASE_URL}/slot-adjustments/requests`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (!listRes.ok) throw new Error('Failed to load existing adjustment requests');
+          const listData = await listRes.json();
+          const existing = (listData.data || []).find((r) => String(r.leave_id) === String(leaveId));
+          requestId = existing?.request_id || null;
+        } else {
+          throw new Error(createErr.detail || 'Failed to initialize slot adjustment request');
+        }
       }
-      
-      const adjustData = await adjustRes.json();
-      setLeaveSuccess(
-        `Adjustment request sent! ${adjustData.data?.affected_slots_count || 0} slots need coverage. Coordinator has been notified.`
+
+      const requestSlotsRes = await fetch(
+        `${API_BASE_URL}/slot-adjustments/requests/${requestId}/affected-slots`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      
-      // Refresh affected slots
+      if (!requestSlotsRes.ok) throw new Error('Failed to load faculty availability for affected slots');
+      const requestSlotsData = await requestSlotsRes.json();
+      const modalSlots = (requestSlotsData.data || []).map((slot) => ({
+        ...slot,
+        replacement_faculty_id: slot.replacement_faculty_id || '',
+      }));
+      setSlotModal({
+        open: true,
+        leaveId,
+        requestId,
+        loading: false,
+        slots: modalSlots,
+      });
+    } catch (err) {
+      setSlotModal({ open: false, leaveId: null, requestId: null, loading: false, slots: [] });
+      setLeavesError(err.message);
+    }
+  };
+
+  const submitSlotAdjustments = async () => {
+    try {
+      const token = localStorage.getItem('authToken') || '';
+      for (const slot of slotModal.slots) {
+        if (!slot?.affected_slot_id) continue;
+        await fetch(`${API_BASE_URL}/slot-adjustments/assign-replacement`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            affected_slot_id: slot.affected_slot_id,
+            replacement_faculty_id: slot.replacement_faculty_id || null,
+          }),
+        });
+      }
+
+      setLeaveSuccess('Slot adjustment requests submitted. Assigned faculty can now accept or reject.');
+      setSlotModal({ open: false, leaveId: null, requestId: null, loading: false, slots: [] });
       fetchAffectedSlots();
-      
-      // Scroll to top to show success message
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      fetchIncomingRequests();
+    } catch (err) {
+      setLeavesError(err.message);
+    }
+  };
+
+  const handleAssignFromAffectedGrid = async (affectedSlotId, replacementFacultyId) => {
+    try {
+      setAssigningSlotId(affectedSlotId);
+      const token = localStorage.getItem('authToken') || '';
+      const res = await fetch(`${API_BASE_URL}/slot-adjustments/assign-replacement`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          affected_slot_id: affectedSlotId,
+          replacement_faculty_id: replacementFacultyId || null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to assign faculty');
+      }
+      fetchAffectedSlots();
+      fetchIncomingRequests();
+    } catch (err) {
+      setLeavesError(err.message);
+    } finally {
+      setAssigningSlotId(null);
+    }
+  };
+
+  const decideIncomingRequest = async (affectedSlotId, decision) => {
+    try {
+      const token = localStorage.getItem('authToken') || '';
+      const res = await fetch(`${API_BASE_URL}/slot-adjustments/faculty-decision`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ affected_slot_id: affectedSlotId, decision }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to submit decision');
+      }
+      fetchIncomingRequests();
+      fetchAffectedSlots();
     } catch (err) {
       setLeavesError(err.message);
     }
@@ -353,6 +477,11 @@ export default function FacultyDashboard() {
           </span>
         );
     }
+  };
+
+  const formatSlotStatus = (status) => {
+    if (status === 'NO_REPLACEMENT') return 'FREE_SLOT';
+    return status || 'PENDING';
   };
 
   const renderFacultySelector = () => (
@@ -497,7 +626,7 @@ export default function FacultyDashboard() {
                   <div className="relative">
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,.pdf,application/pdf"
                       onChange={handleImageUpload}
                       disabled={uploadingImage}
                       className="w-full bg-white border-2 border-gray-300 rounded-xl py-3 px-4 text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-600 file:text-white hover:file:bg-teal-700 file:cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all disabled:opacity-50"
@@ -514,7 +643,7 @@ export default function FacultyDashboard() {
                       Image uploaded successfully
                     </div>
                   )}
-                  <p className="text-xs text-gray-500">Upload medical certificate, appointment letter, or other proof (Max 5MB)</p>
+                  <p className="text-xs text-gray-500">Upload medical certificate, appointment letter, or other proof (Image/PDF, Max 5MB)</p>
                 </div>
 
                 <button
@@ -620,91 +749,189 @@ export default function FacultyDashboard() {
                             </div>
                           )}
                         </div>
-                        {leave.status === 'APPROVED' && (
-                          <button
-                            onClick={() => handleRequestAdjustment(leave.leave_id)}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            Request Adjustment
-                          </button>
-                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        );
 
-              {/* Affected Slots Section */}
-              {affectedSlots.length > 0 && (
-                <div className="mt-8 pt-8 border-t-2 border-gray-200">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-yellow-600" />
-                    My Affected Slots
-                  </h3>
-                  <div className="space-y-4">
-                    {affectedSlots.map((request) => (
-                      <div key={request.request_id} className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-5">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
+      case 'slot-adjustments':
+        return (
+          <div className="max-w-6xl mx-auto space-y-6">
+            <div className="bg-white border-2 border-gray-100 rounded-2xl p-8">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Slot Adjustments</h2>
+                  <p className="text-sm text-gray-600">Adjust your affected slots and respond to incoming replacement requests.</p>
+                </div>
+                <button
+                  onClick={() => { fetchMyLeaves(); fetchAffectedSlots(); fetchIncomingRequests(); }}
+                  disabled={loadingLeaves || loadingAffectedSlots || loadingIncoming}
+                  className="px-4 py-2 text-xs font-semibold text-teal-700 border-2 border-teal-200 rounded-lg hover:bg-teal-50 transition-colors disabled:opacity-50"
+                >
+                  Refresh All
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">1) Approved Leaves To Adjust</h3>
+                  <p className="text-xs text-gray-600">Pick an approved leave and open adjustment modal.</p>
+                </div>
+                {loadingLeaves ? (
+                  <div className="py-8 flex items-center justify-center gap-2 text-gray-600 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading approved leaves...
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[380px] overflow-auto pr-1">
+                    {myLeaves.filter((leave) => leave.status === 'APPROVED').length === 0 ? (
+                      <p className="text-sm text-gray-500">No approved leaves available for adjustment.</p>
+                    ) : (
+                      myLeaves
+                        .filter((leave) => leave.status === 'APPROVED')
+                        .map((leave) => (
+                          <div key={leave.leave_id} className="bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
                             <p className="text-sm font-semibold text-gray-900">
-                              Adjustment Request - {request.status}
+                              {new Date(leave.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              {' → '}
+                              {new Date(leave.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              Progress: {request.resolved_slots}/{request.total_affected_slots} slots resolved
-                            </p>
+                            <p className="text-xs text-gray-600 mt-1">{leave.reason}</p>
+                            <button
+                              onClick={() => handleRequestAdjustment(leave.leave_id)}
+                              className="mt-3 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-all inline-flex items-center gap-2"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              Adjust Slots
+                            </button>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border-2 ${
-                            request.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
-                            request.status === 'IN_PROGRESS' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                            'bg-yellow-50 text-yellow-700 border-yellow-200'
-                          }`}>
-                            {request.status}
+                        ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">2) My Affected Slots</h3>
+                  <p className="text-xs text-gray-600">Track your adjustment request progress and status.</p>
+                </div>
+                {loadingAffectedSlots ? (
+                  <div className="py-8 flex items-center justify-center gap-2 text-gray-600 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading affected slots...
+                  </div>
+                ) : affectedSlots.length === 0 ? (
+                  <p className="text-sm text-gray-500">No affected-slot requests yet.</p>
+                ) : (
+                  <div className="space-y-3 max-h-[380px] overflow-auto pr-1">
+                    {affectedSlots.map((request) => (
+                      <div key={request.request_id} className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-semibold text-gray-900">Request {request.status}</p>
+                          <span className="text-xs text-gray-700">
+                            {request.resolved_slots}/{request.total_affected_slots}
                           </span>
                         </div>
                         <div className="space-y-2">
-                          {request.affected_slots.map((slot) => (
-                            <div key={slot.affected_slot_id} className="bg-white border-2 border-gray-100 rounded-lg p-3">
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
-                                <div>
-                                  <span className="text-gray-500">Day:</span>
-                                  <span className="ml-2 text-gray-900 font-medium">{slot.days?.day_name}</span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500">Time:</span>
-                                  <span className="ml-2 text-gray-900 font-medium">
-                                    {slot.time_slots?.start_time} - {slot.time_slots?.end_time}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500">Subject:</span>
-                                  <span className="ml-2 text-gray-900 font-medium">{slot.subjects?.subject_name}</span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500">Division:</span>
-                                  <span className="ml-2 text-gray-900 font-medium">{slot.divisions?.division_name}</span>
-                                </div>
+                          {(request.affected_slots || []).map((slot) => (
+                            <div key={slot.affected_slot_id} className="bg-white border border-gray-200 rounded-lg p-2.5 text-xs">
+                              <p className="text-gray-900 font-medium">
+                                {slot.days?.day_name} | {slot.time_slots?.start_time} - {slot.time_slots?.end_time}
+                              </p>
+                              <p className="text-gray-600">
+                                {slot.subjects?.subject_name} | {slot.divisions?.division_name}
+                              </p>
+                              <p className="text-gray-700 mt-1">
+                                Status: <span className="font-semibold">{formatSlotStatus(slot.status)}</span>
+                              </p>
+                              <div className="mt-2">
+                                <select
+                                  value={slot.replacement_faculty_id || ''}
+                                  onChange={(e) => handleAssignFromAffectedGrid(slot.affected_slot_id, e.target.value)}
+                                  disabled={assigningSlotId === slot.affected_slot_id}
+                                  className="w-full bg-white border border-gray-300 rounded-lg py-1.5 px-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-60"
+                                >
+                                  <option value="">Mark as free slot</option>
+                                  {(slot.available_faculty || []).map((opt) => {
+                                    const facultyId = opt?.faculty?.faculty_id || opt?.faculty_id;
+                                    const facultyName = opt?.faculty?.faculty_name || opt?.faculty_name || 'Faculty';
+                                    const markers = [];
+                                    markers.push(opt.is_free ? 'Free' : 'Busy');
+                                    if (opt.teaches_division && opt.teaches_subject) {
+                                      markers.push('Best match');
+                                    } else {
+                                      if (opt.teaches_division) markers.push('Teaches division');
+                                      if (opt.teaches_subject) markers.push('Teaches same subject');
+                                    }
+                                    return (
+                                      <option key={facultyId} value={facultyId}>
+                                        {facultyName} ({markers.join(' | ')})
+                                      </option>
+                                    );
+                                  })}
+                                </select>
                               </div>
-                              {slot.replacement_faculty_id && slot.faculty && (
-                                <div className="mt-2 pt-2 border-t-2 border-gray-100">
-                                  <span className="text-xs text-green-700">
-                                    ✓ Covered by: {slot.faculty.faculty_name}
-                                  </span>
-                                </div>
-                              )}
-                              {slot.status === 'NO_REPLACEMENT' && (
-                                <div className="mt-2 pt-2 border-t-2 border-gray-100">
-                                  <span className="text-xs text-red-700">
-                                    ⚠ No faculty available for this slot
-                                  </span>
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">3) Incoming Slot Requests</h3>
+                <p className="text-xs text-gray-600">Accept or reject requests where you are the replacement faculty.</p>
+              </div>
+              {loadingIncoming ? (
+                <div className="flex items-center justify-center py-12 gap-2 text-gray-600">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Loading incoming requests...
+                </div>
+              ) : incomingRequests.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <AlertCircle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium text-gray-600">No pending requests for you</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {incomingRequests.map((req) => (
+                    <div key={req.affected_slot_id} className="bg-gray-50 border-2 border-gray-100 rounded-xl p-5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-4">
+                        <p><span className="text-gray-500">Division:</span> <span className="font-medium">{req.divisions?.division_name}</span></p>
+                        <p><span className="text-gray-500">Subject:</span> <span className="font-medium">{req.subjects?.subject_name}</span></p>
+                        <p><span className="text-gray-500">Day:</span> <span className="font-medium">{req.days?.day_name}</span></p>
+                        <p><span className="text-gray-500">Time:</span> <span className="font-medium">{req.time_slots?.start_time} - {req.time_slots?.end_time}</span></p>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Requested by {req.original_faculty?.faculty_name || 'faculty'}.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => decideIncomingRequest(req.affected_slot_id, 'ACCEPT')}
+                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => decideIncomingRequest(req.affected_slot_id, 'REJECT')}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -782,6 +1009,83 @@ export default function FacultyDashboard() {
           </div>
         </DashboardLayout>
       </div>
+      {slotModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl border border-gray-200 w-full max-w-4xl max-h-[85vh] overflow-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Request Slot Adjustment</h3>
+              <button
+                onClick={() => setSlotModal({ open: false, leaveId: null, requestId: null, loading: false, slots: [] })}
+                className="text-sm text-gray-500 hover:text-gray-900"
+              >
+                Close
+              </button>
+            </div>
+            {slotModal.loading ? (
+              <div className="py-10 flex items-center justify-center gap-2 text-gray-600">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Loading affected slots...
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {leavesError && (
+                  <div className="p-3 rounded-lg bg-red-50 border-2 border-red-200 text-red-700 text-sm">
+                    {leavesError}
+                  </div>
+                )}
+                {slotModal.slots.map((slot) => (
+                  <div key={slot.entry_id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-3">
+                      <p><span className="text-gray-500">Division:</span> <span className="font-medium">{slot.divisions?.division_name}</span></p>
+                      <p><span className="text-gray-500">Subject:</span> <span className="font-medium">{slot.subjects?.subject_name}</span></p>
+                      <p><span className="text-gray-500">Day:</span> <span className="font-medium">{slot.days?.day_name}</span></p>
+                      <p><span className="text-gray-500">Time:</span> <span className="font-medium">{slot.time_slots?.start_time} - {slot.time_slots?.end_time}</span></p>
+                    </div>
+                    <select
+                      value={slot.replacement_faculty_id || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSlotModal((prev) => ({
+                          ...prev,
+                          slots: prev.slots.map((s) => s.entry_id === slot.entry_id ? { ...s, replacement_faculty_id: value } : s),
+                        }));
+                      }}
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-2.5 px-4 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    >
+                      <option value="">Keep as free slot</option>
+                      {(slot.available_faculty || []).map((opt) => {
+                        const facultyId = opt?.faculty?.faculty_id || opt?.faculty_id;
+                        const facultyName = opt?.faculty?.faculty_name || opt?.faculty_name || 'Faculty';
+                        const markers = [];
+                        markers.push(opt.is_free ? 'Free' : 'Busy');
+                        if (opt.teaches_division && opt.teaches_subject) {
+                          markers.push('Best match');
+                        } else {
+                          if (opt.teaches_division) markers.push('Teaches division');
+                          if (opt.teaches_subject) markers.push('Teaches same subject');
+                        }
+                        return (
+                          <option key={facultyId} value={facultyId}>
+                            {facultyName} ({markers.join(' | ')})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                ))}
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={submitSlotAdjustments}
+                    className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg"
+                  >
+                    Submit Adjustment Request
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </RoleGuard>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Loader2, Users, FileText, RefreshCw, CheckCircle2, XCircle, 
-  AlertCircle, UserPlus, ChevronDown, ChevronUp, Send 
+  AlertCircle, UserPlus, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
@@ -14,9 +14,6 @@ export default function ManageFacultyGrid() {
   const [loading, setLoading] = useState(false);
   const [facultyList, setFacultyList] = useState([]);
   const [leaveApplications, setLeaveApplications] = useState([]);
-  const [adjustmentRequests, setAdjustmentRequests] = useState([]);
-  const [selectedRequest, setSelectedRequest] = useState(null);
-  const [affectedSlots, setAffectedSlots] = useState([]);
   
   // Add Faculty Form State
   const [addFacultyForm, setAddFacultyForm] = useState({
@@ -50,7 +47,6 @@ export default function ManageFacultyGrid() {
   // UI State
   const [showFacultyList, setShowFacultyList] = useState(false);
   const [expandedLeave, setExpandedLeave] = useState(null);
-  const [expandedRequest, setExpandedRequest] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -61,23 +57,20 @@ export default function ManageFacultyGrid() {
       setLoading(true);
       const token = localStorage.getItem('authToken') || '';
       
-      const [facultyRes, leavesRes, requestsRes, deptRes] = await Promise.all([
+      const [facultyRes, leavesRes, deptRes] = await Promise.all([
         fetch(`${API_BASE_URL}/faculty`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/faculty-leaves?status=PENDING`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE_URL}/slot-adjustments/requests`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
-      const [facultyData, leavesData, requestsData, deptData] = await Promise.all([
+      const [facultyData, leavesData, deptData] = await Promise.all([
         facultyRes.json(),
         leavesRes.json(),
-        requestsRes.json(),
         deptRes.json(),
       ]);
 
       setFacultyList(facultyData.data || []);
       setLeaveApplications(leavesData.data || []);
-      setAdjustmentRequests(requestsData.data || []);
       setDepartments(deptData.data || []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -206,66 +199,6 @@ export default function ManageFacultyGrid() {
     }
   };
 
-  const handleViewAffectedSlots = async (requestId) => {
-    try {
-      setSelectedRequest(requestId);
-      setExpandedRequest(requestId);
-      const token = localStorage.getItem('authToken') || '';
-      
-      const res = await fetch(
-        `${API_BASE_URL}/slot-adjustments/requests/${requestId}/affected-slots`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (!res.ok) {
-        throw new Error('Failed to fetch affected slots');
-      }
-
-      const data = await res.json();
-      setAffectedSlots(data.data || []);
-    } catch (error) {
-      console.error('Failed to fetch affected slots:', error);
-      alert(error.message);
-    }
-  };
-
-  const handleAssignReplacement = async (affectedSlotId, replacementFacultyId) => {
-    try {
-      const token = localStorage.getItem('authToken') || '';
-      
-      // Handle "none" string - convert to null
-      const facultyId = (replacementFacultyId === 'none' || !replacementFacultyId) ? null : replacementFacultyId;
-      
-      const res = await fetch(`${API_BASE_URL}/slot-adjustments/assign-replacement`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          affected_slot_id: affectedSlotId,
-          replacement_faculty_id: facultyId,
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.detail || 'Failed to assign replacement');
-      }
-
-      // Refresh affected slots
-      if (selectedRequest) {
-        handleViewAffectedSlots(selectedRequest);
-      }
-      
-      // Refresh requests
-      fetchData();
-    } catch (error) {
-      console.error('Failed to assign replacement:', error);
-      alert(error.message);
-    }
-  };
-
   return (
     <div className="space-y-4">
       {/* Top Section - Add Faculty */}
@@ -385,7 +318,7 @@ export default function ManageFacultyGrid() {
       </div>
 
       {/* Bottom Grid - 3 Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Faculty List */}
         <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
           <button
@@ -485,101 +418,6 @@ export default function ManageFacultyGrid() {
           </div>
         </div>
 
-        {/* Slot Adjustment Requests */}
-        <div className="bg-white border-2 border-gray-100 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center border-2 border-orange-200">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Slot Adjustments</h3>
-                <p className="text-gray-600 text-xs">{adjustmentRequests.length} requests</p>
-              </div>
-            </div>
-            <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <RefreshCw className="w-4 h-4 text-gray-600" />
-            </button>
-          </div>
-
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {adjustmentRequests.length === 0 ? (
-              <p className="text-center text-gray-500 text-sm py-8">No adjustment requests</p>
-            ) : (
-              adjustmentRequests.map(request => (
-                <div key={request.request_id} className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">{request.faculty?.faculty_name || 'Unknown'}</p>
-                      <p className="text-xs text-gray-600">
-                        {request.resolved_slots}/{request.total_affected_slots} slots resolved
-                      </p>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${
-                        request.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                        request.status === 'IN_PROGRESS' ? 'bg-teal-100 text-teal-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {request.status}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleViewAffectedSlots(request.request_id)}
-                      className="text-gray-600 hover:text-gray-900 transition-colors"
-                    >
-                      {expandedRequest === request.request_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  
-                  {expandedRequest === request.request_id && affectedSlots.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                      {affectedSlots.map(slot => (
-                        <div key={slot.affected_slot_id} className="bg-white border-2 border-gray-200 rounded p-2">
-                          <div className="text-xs space-y-1 mb-2">
-                            <p className="text-gray-900 font-medium">
-                              {slot.days?.day_name} | {slot.time_slots?.start_time}-{slot.time_slots?.end_time}
-                            </p>
-                            <p className="text-gray-600">
-                              {slot.subjects?.subject_name} - {slot.divisions?.division_name}
-                            </p>
-                          </div>
-                          
-                          {slot.status === 'PENDING' && (
-                            <div className="space-y-1">
-                              <select
-                                onChange={(e) => handleAssignReplacement(slot.affected_slot_id, e.target.value)}
-                                className="w-full bg-white border-2 border-gray-300 rounded px-2 py-1 text-xs text-gray-900 focus:border-teal-600 focus:outline-none"
-                                defaultValue=""
-                              >
-                                <option value="">Assign Faculty...</option>
-                                {(slot.available_faculty || []).map(fac => (
-                                  <option key={fac.faculty_id} value={fac.faculty.faculty_id}>
-                                    {fac.faculty.faculty_name} {fac.is_free ? '✓ Free' : '✗ Busy'} 
-                                    {fac.teaches_division && fac.teaches_subject ? ' (Best Match)' : 
-                                     fac.teaches_division ? ' (Teaches Div)' : 
-                                     fac.teaches_subject ? ' (Teaches Sub)' : ''}
-                                  </option>
-                                ))}
-                                <option value="none">No Faculty Available</option>
-                              </select>
-                            </div>
-                          )}
-                          
-                          {slot.status === 'ASSIGNED' && slot.replacement_faculty && (
-                            <p className="text-xs text-green-700">✓ Covered by: {slot.replacement_faculty.faculty_name}</p>
-                          )}
-                          
-                          {slot.status === 'NO_REPLACEMENT' && (
-                            <p className="text-xs text-red-700">⚠ No faculty available</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

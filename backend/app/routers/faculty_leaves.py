@@ -1,7 +1,8 @@
 """Faculty leaves management routes with RBAC and slot adjustment workflow."""
 from datetime import datetime, date
 from typing import List
-from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Request
 from pydantic import BaseModel
 from app.dependencies.auth import get_current_user, get_current_user_with_profile, CurrentUser, require_role
 from app.supabase_client import get_user_supabase, get_service_supabase
@@ -627,14 +628,19 @@ async def delete_faculty_leave(
 @router.post("/upload-proof", response_model=SuccessResponse)
 async def upload_leave_proof(
     file: UploadFile = File(...),
+    request: Request = None,
     current_user: CurrentUser = Depends(require_role("FACULTY")),
 ) -> dict:
-    """Upload leave proof image to Supabase Storage."""
+    """Upload leave proof file (image/pdf) to local server storage."""
     try:
-        if not file.content_type or not file.content_type.startswith("image/"):
+        allowed_types = {"application/pdf"}
+        if not file.content_type or (
+            not file.content_type.startswith("image/")
+            and file.content_type not in allowed_types
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only image files are allowed",
+                detail="Only image or PDF files are allowed",
             )
         
         # Get faculty info
@@ -652,26 +658,24 @@ async def upload_leave_proof(
         
         # Generate unique filename
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        file_extension = file.filename.split(".")[-1] if file.filename else "jpg"
-        file_path = f"{faculty_id}/{timestamp}.{file_extension}"
-        
-        # Upload to Supabase Storage
-        supabase = get_service_supabase()
-        storage_response = supabase.storage.from_("leave-proofs").upload(
-            file_path,
-            file_content,
-            {"content-type": file.content_type}
-        )
-        
-        # Get public URL
-        public_url = supabase.storage.from_("leave-proofs").get_public_url(file_path)
+        file_extension = (Path(file.filename).suffix if file.filename else ".bin").lower()
+        if not file_extension:
+            file_extension = ".pdf" if file.content_type == "application/pdf" else ".jpg"
+        relative_path = Path("leave-proofs") / str(faculty_id) / f"{timestamp}{file_extension}"
+        backend_root = Path(__file__).resolve().parents[2]
+        absolute_path = backend_root / "uploads" / relative_path
+        absolute_path.parent.mkdir(parents=True, exist_ok=True)
+        absolute_path.write_bytes(file_content)
+
+        base_url = str(request.base_url).rstrip("/") if request else ""
+        public_url = f"{base_url}/uploads/{relative_path.as_posix()}"
         
         return {
             "data": {
-                "file_path": file_path,
+                "file_path": relative_path.as_posix(),
                 "public_url": public_url,
             },
-            "message": "Leave proof uploaded successfully",
+            "message": "Leave proof uploaded successfully (local storage)",
         }
     except HTTPException:
         raise
