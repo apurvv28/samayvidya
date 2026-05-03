@@ -49,6 +49,38 @@ def _normalize_role(value: str | None) -> str | None:
     return mapping.get(text, text)
 
 
+def canonical_department_id(value: str | None) -> str | None:
+    """Normalize department UUID / string from DB or JWT for consistent comparisons."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def resolve_effective_department_id(
+    current_user: CurrentUser,
+    requested_department_id: str | None = None,
+) -> str | None:
+    """
+    Department scope for list/query endpoints.
+
+    - ADMIN: optional filter from ``requested_department_id`` (None = caller should not filter by dept).
+    - Everyone else: always their own ``department_id``; mismatched query params return 403.
+    """
+    req = canonical_department_id(requested_department_id)
+    user_dept = canonical_department_id(current_user.department_id)
+    if current_user.role == "ADMIN":
+        return req
+    if not user_dept:
+        return None
+    if req and req != user_dept:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You may only access your own department's data.",
+        )
+    return user_dept
+
+
 async def get_current_user(request: Request) -> CurrentUser:
     """
     Extract and validate JWT token from Authorization header.
@@ -117,7 +149,7 @@ async def get_current_user(request: Request) -> CurrentUser:
             uid: str = payload.get("sub")
             email: str | None = payload.get("email")
             token_role = _normalize_role(payload.get("role"))
-            department_id = payload.get("department_id")
+            department_id = canonical_department_id(payload.get("department_id"))
 
             if uid is None:
                 raise HTTPException(
@@ -199,9 +231,10 @@ async def get_current_user_with_profile(
         return current_user
     
     try:
-        from app.supabase_client import get_user_supabase
+        from app.supabase_client import get_service_supabase
         
-        supabase = get_user_supabase()
+        # Use service role to bypass RLS for profile lookup
+        supabase = get_service_supabase()
         
         profile = None
         # Prefer `user_id` mapping (newer profile shape)
@@ -233,10 +266,14 @@ async def get_current_user_with_profile(
 
         if not profile:
             return current_user
-        
+
+        token_dept = canonical_department_id(current_user.department_id)
+
         # Enhance CurrentUser with profile information
         current_user.role = _normalize_role(profile.get("role")) or current_user.role
-        current_user.department_id = profile.get("department_id")
+        current_user.department_id = (
+            canonical_department_id(profile.get("department_id")) or token_dept
+        )
         current_user.is_hod = profile.get("is_hod", False)
         current_user.is_coordinator = profile.get("is_coordinator", False)
         current_user.prn = profile.get("prn")

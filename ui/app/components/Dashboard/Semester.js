@@ -4,6 +4,16 @@ import { useState, useEffect } from 'react';
 import { Plus, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+function authHeaders(extra = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : '';
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export default function Semester() {
   const [year, setYear] = useState('SY');
   const [subjects, setSubjects] = useState([]);
@@ -39,7 +49,9 @@ export default function Semester() {
     setLoading(true);
     try {
       // Fetch Subjects for selected year via Backend (Bypasses RLS)
-      const response = await fetch(`http://localhost:8000/subjects?year=${year}`);
+      const response = await fetch(`${API_BASE_URL}/subjects?year=${encodeURIComponent(year)}`, {
+        headers: authHeaders(),
+      });
       const json = await response.json();
       
       if (!response.ok) {
@@ -49,7 +61,7 @@ export default function Semester() {
 
       // Fetch Departments for dropdown
       try {
-        const deptResponse = await fetch('http://localhost:8000/departments');
+        const deptResponse = await fetch(`${API_BASE_URL}/departments`, { headers: authHeaders() });
         const deptJson = await deptResponse.json();
         if (deptResponse.ok) {
              setDepartments(deptJson.data || []);
@@ -72,8 +84,9 @@ export default function Semester() {
     if (!confirm('Are you sure you want to delete this subject?')) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/subjects/${id}`, {
-                    method: 'DELETE'
+      const response = await fetch(`${API_BASE_URL}/subjects/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
       });
 
       if (!response.ok) {
@@ -112,12 +125,10 @@ export default function Semester() {
           is_tutorial_online: formData.delivery_mode === 'ONLINE' ? true : formData.is_tutorial_online
       };
       
-      const response = await fetch('http://localhost:8000/subjects', {
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload) 
+      const response = await fetch(`${API_BASE_URL}/subjects`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {

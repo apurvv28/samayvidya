@@ -267,6 +267,66 @@ def send_revised_timetable_update_email(
     return _send_email(to_email, subject, html_content)
 
 
+def send_coordinator_transfer_old_otp_email(to_email: str, otp: str, name: str) -> bool:
+    """OTP to current coordinator to authorize starting a department transfer."""
+    subject = "Verify transfer — Timetable Coordinator"
+    html_content = f"""
+    <html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <h2 style="color: #0d9488;">Department ownership transfer</h2>
+        <p>Hello {name},</p>
+        <p>You started a <strong>coordinator ownership transfer</strong> for your department. Use this OTP to continue:</p>
+        <div style="background: #f0fdfa; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+          <span style="font-size: 32px; letter-spacing: 6px; font-weight: bold; color: #0f766e;">{otp}</span>
+        </div>
+        <p style="color:#64748b;font-size:14px;">Valid for 10 minutes. If this wasn&apos;t you, ignore this email.</p>
+        <p>— Timetable Scheduler</p>
+      </div>
+    </body></html>
+    """
+    return _send_email(to_email, subject, html_content)
+
+
+def send_coordinator_transfer_new_otp_email(
+    to_email: str, otp: str, new_coordinator_name: str, old_coordinator_email: str
+) -> bool:
+    """OTP to the incoming coordinator; outgoing coordinator will enter this OTP to finish."""
+    subject = "Coordinator transfer — your verification code"
+    html_content = f"""
+    <html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <h2 style="color: #0d9488;">You are being named Timetable Coordinator</h2>
+        <p>Hello {new_coordinator_name},</p>
+        <p>The current coordinator ({old_coordinator_email}) is transferring department ownership to you.</p>
+        <p>Share this OTP <strong>only with the current coordinator</strong> so they can complete the transfer:</p>
+        <div style="background: #f0fdfa; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+          <span style="font-size: 32px; letter-spacing: 6px; font-weight: bold; color: #0f766e;">{otp}</span>
+        </div>
+        <p style="color:#64748b;font-size:14px;">Valid for 10 minutes. After completion you will receive your login password by email.</p>
+        <p>— Timetable Scheduler</p>
+      </div>
+    </body></html>
+    """
+    return _send_email(to_email, subject, html_content)
+
+
+def send_coordinator_transfer_complete_notice(*, old_email: str, new_name: str, new_email: str) -> bool:
+    """Inform the previous coordinator that access has moved."""
+    subject = "Coordinator transfer completed"
+    html_content = f"""
+    <html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <h2 style="color: #0d9488;">Transfer complete</h2>
+        <p>Department timetable coordinator access has been transferred to:</p>
+        <ul><li><strong>{new_name}</strong> — {new_email}</li></ul>
+        <p>Your previous login for this account no longer works. If you need access again, ask an administrator.</p>
+        <p>— Timetable Scheduler</p>
+      </div>
+    </body></html>
+    """
+    return _send_email(old_email, subject, html_content)
+
+
 def _send_email(to_email: str, subject: str, html_content: str) -> bool:
     """Internal helper to send email."""
     message = MIMEMultipart()

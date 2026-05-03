@@ -7,7 +7,11 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 import json
 from app.config import settings
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import (
+    get_current_user_with_profile,
+    CurrentUser,
+    resolve_effective_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 from app.services.timetable_conflict_audit import audit_timetable_conflicts, fetch_timetable_entries_for_version
@@ -212,18 +216,54 @@ class TimetableVersionUpdate(BaseModel):
 
 @router.get("", response_model=SuccessResponse)
 async def list_timetable_versions(
-    current_user: CurrentUser = Depends(get_current_user),
+    department_id: str | None = None,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """List all timetable versions (RLS enforced)."""
+    """List all timetable versions with department filtering enforced."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
-        response = supabase.table("timetable_versions").select("*").order("created_at", desc=True).execute()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_service_supabase()
+
+        target_dept_id = resolve_effective_department_id(current_user, department_id)
+
+        print(f"[TIMETABLE_VERSIONS] User: {current_user.email}, Role: {current_user.role}, Department: {target_dept_id}")
+
+        if current_user.role != "ADMIN":
+            if not target_dept_id:
+                print(f"[TIMETABLE_VERSIONS] No department assigned for user {current_user.email}")
+                return {
+                    "data": [],
+                    "message": "No timetables found. Please contact admin to assign you to a department.",
+                }
+
+        query = supabase.table("timetable_versions").select("*").order("created_at", desc=True)
+
+        if current_user.role != "ADMIN":
+            query = query.eq("department_id", target_dept_id)
+            print(f"[TIMETABLE_VERSIONS] Filtering by department_id: {target_dept_id}")
+        elif target_dept_id:
+            query = query.eq("department_id", target_dept_id)
+            
+        response = query.execute()
         rows = [_hydrate_version_row(row) for row in (response.data or [])]
+        print(f"[TIMETABLE_VERSIONS] Found {len(rows)} timetable versions")
+        
+        # Return helpful message if no data
+        if not rows:
+            return {
+                "data": [],
+                "message": "No timetables found. Generate a timetable to get started."
+            }
+        
         return {
             "data": rows,
             "message": "Timetable versions retrieved successfully",
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[TIMETABLE_VERSIONS ERROR] {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch timetable versions: {str(e)}",
@@ -233,7 +273,7 @@ async def list_timetable_versions(
 @router.get("/{version_id}/conflict-audit", response_model=SuccessResponse)
 async def audit_timetable_version_conflicts(
     version_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Slot-level and merged-interval room/faculty overlap check for a saved timetable version."""
     try:
@@ -274,7 +314,7 @@ async def audit_timetable_version_conflicts(
 @router.get("/{version_id}", response_model=SuccessResponse)
 async def get_timetable_version(
     version_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Get a specific timetable version by ID."""
     try:
@@ -300,7 +340,7 @@ async def get_timetable_version(
 @router.post("", response_model=SuccessResponse)
 async def create_timetable_version(
     version: TimetableVersionCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Create a new timetable version."""
     try:
@@ -329,7 +369,7 @@ async def create_timetable_version(
 async def update_timetable_version(
     version_id: str,
     version: TimetableVersionUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Update a timetable version."""
     try:
@@ -360,7 +400,7 @@ async def update_timetable_version(
 @router.delete("/{version_id}", response_model=SuccessResponse)
 async def delete_timetable_version(
     version_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Delete a timetable version."""
     try:
@@ -390,7 +430,7 @@ class ApprovalAction(BaseModel):
 @router.post("/{version_id}/verify", response_model=SuccessResponse)
 async def verify_timetable_version(
     version_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Coordinator verifies timetable and forwards to HOD."""
     try:
@@ -461,7 +501,7 @@ async def verify_timetable_version(
 @router.post("/{version_id}/approve", response_model=SuccessResponse)
 async def approve_timetable_version(
     version_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """HOD approves and freezes timetable for the specified period."""
     try:
@@ -580,7 +620,7 @@ async def approve_timetable_version(
 async def reject_timetable_version(
     version_id: str,
     action: ApprovalAction,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Coordinator or HOD rejects timetable."""
     try:
@@ -628,7 +668,7 @@ class ExtendTimetableRequest(BaseModel):
 async def extend_timetable_validity(
     version_id: str,
     request: ExtendTimetableRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Coordinator extends timetable validity period."""
     try:
@@ -734,7 +774,7 @@ async def extend_timetable_validity(
 
 @router.get("/expiring/check", response_model=SuccessResponse)
 async def check_expiring_timetables(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Check for timetables that are expiring soon or need deletion."""
     try:

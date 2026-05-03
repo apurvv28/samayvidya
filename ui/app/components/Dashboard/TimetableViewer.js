@@ -8,6 +8,14 @@ import { useAuth } from '../../context/AuthContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
+function authHeaders(extra = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : '';
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 const FALLBACK_DAYS = [
   { day_id: 1, day_name: 'Sunday', is_working_day: false },
   { day_id: 2, day_name: 'Monday', is_working_day: true },
@@ -158,6 +166,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
 
     try {
       setLoading(true);
+      const h = authHeaders();
       const [
         entriesRes,
         daysRes,
@@ -170,16 +179,16 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         departmentsRes,
         batchesRes,
       ] = await Promise.all([
-        fetch(`${API_BASE_URL}/timetable-entries?version_id=${encodeURIComponent(targetVersionId)}`),
-        fetch(`${API_BASE_URL}/days`),
-        fetch(`${API_BASE_URL}/time-slots`),
-        fetch(`${API_BASE_URL}/divisions`),
-        fetch(`${API_BASE_URL}/faculty`),
-        fetch(`${API_BASE_URL}/subjects`),
-        fetch(`${API_BASE_URL}/rooms`),
-        fetch(`${API_BASE_URL}/timetable-versions`),
-        fetch(`${API_BASE_URL}/departments`),
-        fetch(`${API_BASE_URL}/batches`),
+        fetch(`${API_BASE_URL}/timetable-entries?version_id=${encodeURIComponent(targetVersionId)}`, { headers: h }),
+        fetch(`${API_BASE_URL}/days`, { headers: h }),
+        fetch(`${API_BASE_URL}/time-slots`, { headers: h }),
+        fetch(`${API_BASE_URL}/divisions`, { headers: h }),
+        fetch(`${API_BASE_URL}/faculty`, { headers: h }),
+        fetch(`${API_BASE_URL}/subjects`, { headers: h }),
+        fetch(`${API_BASE_URL}/rooms`, { headers: h }),
+        fetch(`${API_BASE_URL}/timetable-versions`, { headers: h }),
+        fetch(`${API_BASE_URL}/departments`, { headers: h }),
+        fetch(`${API_BASE_URL}/batches`, { headers: h }),
       ]);
 
       const responses = await Promise.all([
@@ -365,7 +374,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       setRegenerating(true);
       const response = await fetch(`${API_BASE_URL}/agents/create-timetable`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           department_id: null,
           dry_run: false,
@@ -466,7 +475,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       for (const update of updates) {
         const response = await fetch(`${API_BASE_URL}/timetable-entries/${encodeURIComponent(update.entryId)}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(update.changed),
         });
         const payload = await response.json().catch(() => null);
@@ -513,15 +522,13 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         params.set('entity_id', String(modalState.entityId));
       }
       const query = params.toString();
-      const authHeaders = {
-        Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`,
-      };
+      const pdfAuth = authHeaders();
       // Call backend PDF generation endpoint
       const response = await fetch(
         `${API_BASE_URL}/pdf/timetable/download/${encodeURIComponent(versionId)}${query ? `?${query}` : ''}`,
         {
           method: 'GET',
-          headers: authHeaders,
+          headers: pdfAuth,
         }
       );
       
@@ -542,7 +549,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         // ReportLab missing on server: HTML preview works without it (browser Print → Save as PDF).
         if (isPdfLibraryUnavailable(message)) {
           const previewUrl = `${API_BASE_URL}/pdf/timetable/preview/${encodeURIComponent(versionId)}${query ? `?${query}` : ''}`;
-          const previewResp = await fetch(previewUrl, { method: 'GET', headers: authHeaders });
+          const previewResp = await fetch(previewUrl, { method: 'GET', headers: pdfAuth });
           if (!previewResp.ok) {
             throw new Error(message);
           }
@@ -604,7 +611,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
 
       const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       });
 

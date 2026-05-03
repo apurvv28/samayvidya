@@ -7,6 +7,14 @@ import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
+function authHeaders(extra = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : '';
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 const STAGE_ORDER = [
   'Data Ingestion Agent',
   'Curriculum + Faculty + Division Planning Agents',
@@ -63,7 +71,9 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
     try {
       setLoadingReadiness(true);
       const query = departmentId ? `?department_id=${encodeURIComponent(departmentId)}` : '';
-      const response = await fetch(`${API_BASE_URL}/agents/input-readiness${query}`);
+      const response = await fetch(`${API_BASE_URL}/agents/input-readiness${query}`, {
+        headers: authHeaders(),
+      });
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.detail || 'Failed to fetch input readiness.');
@@ -154,9 +164,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
 
       const response = await fetch(`${API_BASE_URL}/agents/create-timetable/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           department_id: planInput.department_id || null,
           reason: `UI run context: ${JSON.stringify(runContext)}`,

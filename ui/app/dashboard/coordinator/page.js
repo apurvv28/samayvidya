@@ -13,11 +13,17 @@ import ManageFacultyGrid from '../../components/Dashboard/ManageFacultyGrid';
 import FacultyList from '../../components/Dashboard/FacultyList';
 import UserProvisioning from '../../components/Dashboard/UserProvisioning';
 import RoleGuard from '../../components/RoleGuard';
-import { BookOpen, BrainCircuit, Calendar, Users, LayoutDashboard, PlusCircle, Building2, LogOut } from 'lucide-react';
+import CoordinatorProfile from '../../components/Dashboard/CoordinatorProfile';
+import { BookOpen, BrainCircuit, Calendar, Users, LayoutDashboard, PlusCircle, Building2, LogOut, UserCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+function authHeaders() {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : '';
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export default function CoordinatorDashboard() {
   const [activeTab, setActiveTab] = useState('semester');
@@ -33,6 +39,7 @@ export default function CoordinatorDashboard() {
     { id: 'manage-load', label: 'Load', icon: LayoutDashboard },
     { id: 'add-division', label: 'Divisions', icon: PlusCircle },
     { id: 'resources', label: 'Resources', icon: Building2 },
+    { id: 'profile', label: 'Profile', icon: UserCircle },
   ];
 
   const handleLogout = async () => {
@@ -47,7 +54,9 @@ export default function CoordinatorDashboard() {
 
     const fetchLatestVersion = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/timetable-versions`);
+        const response = await fetch(`${API_BASE_URL}/timetable-versions`, {
+          headers: authHeaders(),
+        });
         if (!response.ok) {
           return;
         }
@@ -75,7 +84,9 @@ export default function CoordinatorDashboard() {
 
     const refreshLatestVersion = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/timetable-versions`);
+        const response = await fetch(`${API_BASE_URL}/timetable-versions`, {
+          headers: authHeaders(),
+        });
         if (!response.ok) {
           return;
         }
@@ -114,6 +125,8 @@ export default function CoordinatorDashboard() {
         return <PlusCircle className="w-6 h-6 text-teal-600" />;
       case 'resources':
         return <Building2 className="w-6 h-6 text-teal-600" />;
+      case 'profile':
+        return <UserCircle className="w-6 h-6 text-teal-600" />;
       default:
         return null;
     }
@@ -135,6 +148,8 @@ export default function CoordinatorDashboard() {
         return 'Manage Divisions';
       case 'resources':
         return 'Manage Resources';
+      case 'profile':
+        return 'Profile';
       default:
         return 'Dashboard';
     }
@@ -156,6 +171,8 @@ export default function CoordinatorDashboard() {
         return 'Create and manage student divisions';
       case 'resources':
         return 'Manage classrooms, labs, and other resources';
+      case 'profile':
+        return 'Your account, password, and department transfer';
       default:
         return '';
     }
@@ -310,6 +327,8 @@ export default function CoordinatorDashboard() {
             />
           </>
         );
+      case 'profile':
+        return <CoordinatorProfile />;
       default:
         return null;
     }
@@ -327,9 +346,9 @@ export default function CoordinatorDashboard() {
         />
         
         <DashboardLayout
-          title={['semester', 'agent', 'timetable', 'add-faculty', 'manage-load', 'add-division', 'resources'].includes(activeTab) ? null : getTabTitle()}
-          subtitle={['semester', 'agent', 'timetable', 'add-faculty', 'manage-load', 'add-division', 'resources'].includes(activeTab) ? null : getTabSubtitle()}
-          icon={['semester', 'agent', 'timetable', 'add-faculty', 'manage-load', 'add-division', 'resources'].includes(activeTab) ? null : getTabIcon()}
+          title={['semester', 'agent', 'timetable', 'add-faculty', 'manage-load', 'add-division', 'resources', 'profile'].includes(activeTab) ? null : getTabTitle()}
+          subtitle={['semester', 'agent', 'timetable', 'add-faculty', 'manage-load', 'add-division', 'resources', 'profile'].includes(activeTab) ? null : getTabSubtitle()}
+          icon={['semester', 'agent', 'timetable', 'add-faculty', 'manage-load', 'add-division', 'resources', 'profile'].includes(activeTab) ? null : getTabIcon()}
         >
           <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
             <aside className="h-fit lg:sticky lg:top-24 bg-white border border-gray-200 rounded-xl p-3">

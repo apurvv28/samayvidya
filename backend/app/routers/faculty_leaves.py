@@ -4,7 +4,13 @@ from typing import List
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Request
 from pydantic import BaseModel
-from app.dependencies.auth import get_current_user, get_current_user_with_profile, CurrentUser, require_role
+from app.dependencies.auth import (
+    get_current_user,
+    get_current_user_with_profile,
+    CurrentUser,
+    require_role,
+    canonical_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, LeaveStatusEnum
 from app.services.email_service import (
@@ -245,10 +251,17 @@ async def list_faculty_leaves(
         if status:
             query = query.eq("status", status)
         
-        # HOD can only see leaves in their department
-        if current_user.role == "HOD" and current_user.department_id:
-            # Filter by department through faculty join
-            query = query.eq("faculty.department_id", current_user.department_id)
+        # HOD and COORDINATOR can only see leaves in their department
+        dept_scope = canonical_department_id(current_user.department_id)
+        if current_user.role in ["HOD", "COORDINATOR"]:
+            if not dept_scope:
+                return {"data": [], "message": "Faculty leaves retrieved successfully"}
+            query = supabase.table("faculty_leaves").select(
+                "*, faculty!inner(faculty_name, email, department_id)"
+            )
+            if status:
+                query = query.eq("status", status)
+            query = query.eq("faculty.department_id", dept_scope)
         
         response = query.order("created_at", desc=True).execute()
         return {

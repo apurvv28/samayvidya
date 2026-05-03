@@ -315,7 +315,9 @@ class TimetableOrchestrationEngine:
         load_query = self.supabase.table("load_distribution").select(
             "faculty_name, year, division, subject, theory_hrs, lab_hrs, tutorial_hrs, batch"
         )
-        if user_id:
+        if department_id:
+            load_query = load_query.eq("department_id", department_id)
+        elif user_id:
             load_query = load_query.eq("uploaded_by", user_id)
         load_rows = load_query.execute().data or []
         if not load_rows:
@@ -340,11 +342,20 @@ class TimetableOrchestrationEngine:
             subject_query = subject_query.eq("department_id", department_id)
         subject_rows = subject_query.execute().data or []
 
-        room_query = self.supabase.table("rooms").select("room_id, room_type, is_active")
+        room_query = self.supabase.table("rooms").select("room_id, room_type, is_active, department_id")
+        if department_id:
+            room_query = room_query.eq("department_id", department_id)
         room_rows = [row for row in (room_query.execute().data or []) if row.get("is_active", True)]
 
         batch_query = self.supabase.table("batches").select("batch_id, division_id, is_active, batch_code")
         batch_rows = [row for row in (batch_query.execute().data or []) if row.get("is_active", True)]
+        if department_id:
+            allowed_divisions = {str(r["division_id"]) for r in division_rows if r.get("division_id")}
+            batch_rows = [
+                row
+                for row in batch_rows
+                if str(row.get("division_id") or "") in allowed_divisions
+            ]
 
         day_rows = (
             self.supabase.table("days")

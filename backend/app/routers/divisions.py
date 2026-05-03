@@ -1,7 +1,12 @@
 """Divisions management routes."""
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel
-from app.dependencies.auth import get_current_user, CurrentUser, require_role
+from app.dependencies.auth import (
+    get_current_user_with_profile,
+    CurrentUser,
+    require_role,
+    resolve_effective_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 import csv
@@ -38,13 +43,33 @@ class DivisionUpdate(BaseModel):
 
 @router.get("", response_model=SuccessResponse)
 async def list_divisions(
-    current_user: CurrentUser = Depends(get_current_user),
+    department_id: str | None = None,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """List all divisions (Service Role - Bypasses RLS)."""
+    """List all divisions with department filtering enforced."""
     try:
         supabase = get_service_supabase()
-        response = supabase.table("divisions").select("*").execute()
+
+        target_dept_id = resolve_effective_department_id(current_user, department_id)
+
+        if current_user.role != "ADMIN":
+            if not target_dept_id:
+                return {
+                    "data": [],
+                    "message": "No data found. Please contact admin to assign you to a department.",
+                }
+
+        query = supabase.table("divisions").select("*")
+
+        if current_user.role != "ADMIN":
+            query = query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            query = query.eq("department_id", target_dept_id)
+            
+        response = query.execute()
         return {"data": response.data, "message": "Divisions retrieved successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -56,8 +81,15 @@ async def create_division(
     division: DivisionCreate,
     current_user: CurrentUser = Depends(require_role("COORDINATOR", "ADMIN")),
 ) -> dict:
-    """Create a new division."""
+    """Create a new division with department validation."""
     try:
+        # Validate user can create divisions for this department
+        if current_user.role != "ADMIN" and division.department_id != current_user.department_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create divisions for your own department",
+            )
+        
         supabase = get_service_supabase()
         response = (
             supabase.table("divisions").insert(division.model_dump()).execute()
@@ -66,6 +98,8 @@ async def create_division(
             "data": response.data,
             "message": "Division created successfully",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -77,7 +111,7 @@ async def create_division(
 async def update_division(
     division_id: str,
     division: DivisionUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Update a division."""
     try:
@@ -103,7 +137,7 @@ async def update_division(
 @router.delete("/{division_id}", response_model=SuccessResponse)
 async def delete_division(
     division_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Delete a division."""
     try:
@@ -128,7 +162,7 @@ async def delete_division(
 @router.get("/{division_id}/students", response_model=SuccessResponse)
 async def get_division_students(
     division_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Get all students in a division with their details."""
     try:

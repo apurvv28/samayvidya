@@ -55,6 +55,13 @@ class StudentEnrollmentUpdateRequest(BaseModel):
     division: str
 
 
+class StaffProfileUpdateRequest(BaseModel):
+    """Update name / phone on user_profiles (staff)."""
+
+    name: str | None = None
+    phone: str | None = None
+
+
 def _generate_random_password(length: int = 12) -> str:
     chars = string.ascii_letters + string.digits + "!@#$%&*"
     return "".join(secrets.choice(chars) for _ in range(length))
@@ -611,10 +618,45 @@ async def get_current_user_profile(
     Works with both custom JWT and Supabase Auth tokens.
     """
     try:
+        name = None
+        phone = None
+        try:
+            supabase = get_service_supabase()
+            row = None
+            try:
+                r = (
+                    supabase.table("user_profiles")
+                    .select("name, phone")
+                    .eq("user_id", current_user.uid)
+                    .limit(1)
+                    .execute()
+                )
+                if r.data:
+                    row = r.data[0]
+            except Exception:
+                pass
+            if not row:
+                r2 = (
+                    supabase.table("user_profiles")
+                    .select("name, phone")
+                    .eq("id", current_user.uid)
+                    .limit(1)
+                    .execute()
+                )
+                if r2.data:
+                    row = r2.data[0]
+            if row:
+                name = row.get("name")
+                phone = row.get("phone")
+        except Exception:
+            pass
+
         return {
             "data": {
                 "user_id": current_user.uid,
                 "email": current_user.email,
+                "name": name,
+                "phone": phone,
                 "role": current_user.role,
                 "department_id": current_user.department_id,
                 "prn": current_user.prn,
@@ -629,6 +671,53 @@ async def get_current_user_profile(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch user profile: {str(e)}",
+        )
+
+
+@router.put("/me/profile", response_model=SuccessResponse)
+async def update_staff_profile(
+    payload: StaffProfileUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
+) -> dict:
+    """Update staff user name/phone on user_profiles (coordinator, HOD, faculty, admin)."""
+    if current_user.role not in {"COORDINATOR", "HOD", "FACULTY", "ADMIN"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only staff accounts can update this profile.",
+        )
+    if payload.name is None and payload.phone is None:
+        raise HTTPException(status_code=400, detail="Nothing to update.")
+
+    update_data: dict = {}
+    if payload.name is not None:
+        update_data["name"] = payload.name.strip() or None
+    if payload.phone is not None:
+        update_data["phone"] = payload.phone.strip() or None
+
+    try:
+        supabase = get_service_supabase()
+        res = (
+            supabase.table("user_profiles")
+            .update(update_data)
+            .eq("user_id", current_user.uid)
+            .execute()
+        )
+        if not (res.data or []):
+            res = (
+                supabase.table("user_profiles")
+                .update(update_data)
+                .eq("id", current_user.uid)
+                .execute()
+            )
+        if not (res.data or []):
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        return {"data": update_data, "message": "Profile updated successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to update profile: {str(e)}",
         )
 
 

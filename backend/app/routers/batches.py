@@ -2,7 +2,12 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.config import settings
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import (
+    get_current_user,
+    get_current_user_with_profile,
+    CurrentUser,
+    canonical_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse
 
@@ -30,12 +35,29 @@ class BatchUpdate(BaseModel):
 
 @router.get("", response_model=SuccessResponse)
 async def list_batches(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """List all batches (RLS enforced)."""
+    """List batches scoped to the user's department (non-ADMIN)."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
-        response = supabase.table("batches").select("*").execute()
+        supabase = get_service_supabase()
+        query = supabase.table("batches").select("*")
+        if current_user.role != "ADMIN":
+            dept_id = canonical_department_id(current_user.department_id)
+            if not dept_id:
+                return {"data": [], "message": "Batches retrieved successfully"}
+            divisions = (
+                supabase.table("divisions")
+                .select("division_id")
+                .eq("department_id", dept_id)
+                .execute()
+                .data
+                or []
+            )
+            div_ids = [str(r["division_id"]) for r in divisions if r.get("division_id")]
+            if not div_ids:
+                return {"data": [], "message": "Batches retrieved successfully"}
+            query = query.in_("division_id", div_ids)
+        response = query.execute()
         return {"data": response.data, "message": "Batches retrieved successfully"}
     except Exception as e:
         raise HTTPException(

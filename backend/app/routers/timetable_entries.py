@@ -2,7 +2,11 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.config import settings
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import (
+    get_current_user_with_profile,
+    CurrentUser,
+    canonical_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, SubjectTypeEnum
 
@@ -73,11 +77,11 @@ class TimetableEntryUpdate(BaseModel):
 @router.get("", response_model=SuccessResponse)
 async def list_timetable_entries(
     version_id: str | None = None,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """List all timetable entries with related data (RLS enforced)."""
+    """List all timetable entries with department filtering enforced."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_service_supabase()
         
         # Join with related tables to get names instead of just IDs
         query = supabase.table("timetable_entries").select(
@@ -88,17 +92,36 @@ async def list_timetable_entries(
             "rooms(room_id, room_number, room_type),"
             "days(day_id, day_name),"
             "time_slots(slot_id, start_time, end_time, slot_order),"
-            "batches(batch_id, batch_code)"
+            "batches(batch_id, batch_code),"
+            "timetable_versions(version_id, department_id)"
         )
         
         if version_id:
             query = query.eq("version_id", version_id)
         
         response = query.execute()
+
+        if current_user.role != "ADMIN":
+            user_d = canonical_department_id(current_user.department_id)
+            if not user_d:
+                response.data = []
+            else:
+                filtered_data = [
+                    entry
+                    for entry in (response.data or [])
+                    if canonical_department_id(
+                        (entry.get("timetable_versions") or {}).get("department_id")
+                    )
+                    == user_d
+                ]
+                response.data = filtered_data
+        
         return {
             "data": response.data,
             "message": "Timetable entries retrieved successfully",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -109,12 +132,12 @@ async def list_timetable_entries(
 @router.get("/{entry_id}", response_model=SuccessResponse)
 async def get_timetable_entry(
     entry_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Get a specific timetable entry by ID with related data."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
-        
+        supabase = get_service_supabase()
+
         # Join with related tables to get names
         response = (
             supabase.table("timetable_entries")
@@ -126,14 +149,26 @@ async def get_timetable_entry(
                 "rooms(room_id, room_number, room_type),"
                 "days(day_id, day_name),"
                 "time_slots(slot_id, start_time, end_time, slot_order),"
-                "batches(batch_id, batch_code)"
+                "batches(batch_id, batch_code),"
+                "timetable_versions(version_id, department_id)"
             )
             .eq("entry_id", entry_id)
             .single()
             .execute()
         )
+        row = response.data
+        if current_user.role != "ADMIN":
+            user_d = canonical_department_id(current_user.department_id)
+            entry_dept = canonical_department_id(
+                (row.get("timetable_versions") or {}).get("department_id")
+            )
+            if not user_d or entry_dept != user_d:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Timetable entry not found",
+                )
         return {
-            "data": response.data,
+            "data": row,
             "message": "Timetable entry retrieved successfully",
         }
     except Exception as e:
@@ -146,7 +181,7 @@ async def get_timetable_entry(
 @router.post("", response_model=SuccessResponse)
 async def create_timetable_entry(
     entry: TimetableEntryCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Create a new timetable entry."""
     try:
@@ -197,7 +232,7 @@ async def create_timetable_entry(
 async def update_timetable_entry(
     entry_id: str,
     entry: TimetableEntryUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Update a timetable entry."""
     try:
@@ -266,7 +301,7 @@ async def update_timetable_entry(
 @router.delete("/{entry_id}", response_model=SuccessResponse)
 async def delete_timetable_entry(
     entry_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Delete a timetable entry."""
     try:

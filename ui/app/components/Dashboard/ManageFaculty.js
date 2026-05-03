@@ -4,7 +4,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { Upload, FileText, X, Loader2 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+function authHeaders(extra = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : '';
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 const IGNORED_DB_KEYS = new Set(['load_distribution_id', 'uploaded_by', 'created_at', 'source_row']);
 
@@ -36,7 +44,9 @@ export default function ManageFaculty() {
   const fetchLoadDistributionFromDb = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/faculty/load-distribution`);
+      const response = await fetch(`${API_BASE_URL}/faculty/load-distribution`, {
+        headers: authHeaders(),
+      });
 
       const json = await response.json();
       if (!response.ok) {
@@ -94,6 +104,7 @@ export default function ManageFaculty() {
 
       const response = await fetch(`${API_BASE_URL}/faculty/load-distribution/preview`, {
         method: 'POST',
+        headers: authHeaders(),
         body: formData,
       });
 
@@ -157,9 +168,7 @@ export default function ManageFaculty() {
 
       const response = await fetch(`${API_BASE_URL}/faculty/load-distribution/submit`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           columns: previewColumns,
           rows: previewRows,
@@ -200,6 +209,7 @@ export default function ManageFaculty() {
       setClearingLoadData(true);
       const response = await fetch(`${API_BASE_URL}/faculty/load-distribution`, {
         method: 'DELETE',
+        headers: authHeaders(),
       });
 
       const json = await response.json();

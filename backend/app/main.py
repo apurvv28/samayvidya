@@ -30,6 +30,8 @@ from app.routers import (
     slot_adjustments,
     notifications,
     password_reset,
+    debug,
+    coordinator_transfer,
 )
 from app.config import settings
 
@@ -127,6 +129,8 @@ app.include_router(analytics.router)
 app.include_router(slot_adjustments.router)
 app.include_router(notifications.router)
 app.include_router(password_reset.router)
+app.include_router(debug.router)
+app.include_router(coordinator_transfer.router)
 
 
 @app.exception_handler(Exception)

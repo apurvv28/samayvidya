@@ -4,7 +4,15 @@ import { useState, useEffect } from 'react';
 import { Building2, Plus, Monitor, GraduationCap, X, Loader2, Trash2 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+function authHeaders(extra = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || '' : '';
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 export default function ManageResources() {
   const { showToast } = useToast();
@@ -31,8 +39,8 @@ export default function ManageResources() {
           setLoading(true);
 
           const [roomsRes, deptsRes] = await Promise.all([
-              fetch(`${API_BASE_URL}/rooms`),
-              fetch(`${API_BASE_URL}/departments`)
+              fetch(`${API_BASE_URL}/rooms`, { headers: authHeaders() }),
+              fetch(`${API_BASE_URL}/departments`, { headers: authHeaders() }),
           ]);
 
           if (roomsRes.ok) {
@@ -78,10 +86,8 @@ export default function ManageResources() {
 
           const response = await fetch(`${API_BASE_URL}/rooms`, {
               method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(payload)
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify(payload),
           });
 
           const data = await response.json();
@@ -107,8 +113,9 @@ export default function ManageResources() {
       if (!confirm("Are you sure you want to delete this resource?")) return;
 
       try {
-          const response = await fetch(`${API_BASE_URL}/rooms/${roomId}`, {
-              method: 'DELETE'
+          const response = await fetch(`${API_BASE_URL}/rooms/${encodeURIComponent(roomId)}`, {
+              method: 'DELETE',
+              headers: authHeaders(),
           });
 
           if (!response.ok) {

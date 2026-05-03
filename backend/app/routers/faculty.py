@@ -8,7 +8,12 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from openpyxl import load_workbook
 from pydantic import BaseModel
 from app.config import settings
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import (
+    get_current_user_with_profile,
+    CurrentUser,
+    canonical_department_id,
+    resolve_effective_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, FacultyRoleEnum, SubjectTypeEnum
 from app.services.email_service import send_faculty_credentials
@@ -272,6 +277,7 @@ def _validate_and_transform_load_rows(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     records: list[dict[str, Any]] = []
     errors: list[str] = []
+    dept_for_row = canonical_department_id(current_user.department_id)
 
     for row_index, row in enumerate(rows, start=2):
         try:
@@ -317,21 +323,22 @@ def _validate_and_transform_load_rows(
                     row_index,
                 )
 
-            records.append(
-                {
-                    "faculty_name": faculty_name,
-                    "year": year,
-                    "division": division,
-                    "subject": subject,
-                    "theory_hrs": theory_hours,
-                    "lab_hrs": lab_hours,
-                    "tutorial_hrs": tutorial_hours,
-                    "batch": batch or None,
-                    "total_hrs_per_week": total_hours_per_week,
-                    "source_row": {key: _clean_cell_value(value) for key, value in row.items()},
-                    "uploaded_by": current_user.uid,
-                }
-            )
+            row_payload: dict[str, Any] = {
+                "faculty_name": faculty_name,
+                "year": year,
+                "division": division,
+                "subject": subject,
+                "theory_hrs": theory_hours,
+                "lab_hrs": lab_hours,
+                "tutorial_hrs": tutorial_hours,
+                "batch": batch or None,
+                "total_hrs_per_week": total_hours_per_week,
+                "source_row": {key: _clean_cell_value(value) for key, value in row.items()},
+                "uploaded_by": current_user.uid,
+            }
+            if dept_for_row:
+                row_payload["department_id"] = dept_for_row
+            records.append(row_payload)
         except ValueError as error:
             errors.append(str(error))
 
@@ -768,13 +775,33 @@ def _build_faculty_from_csv_row(
 
 @router.get("", response_model=SuccessResponse)
 async def list_faculty(
-    current_user: CurrentUser = Depends(get_current_user),
+    department_id: str | None = None,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """List all faculty members (Service Role - Bypasses RLS)."""
+    """List all faculty members with department filtering enforced."""
     try:
         supabase = get_service_supabase()
-        response = supabase.table("faculty").select("*").execute()
+
+        target_dept_id = resolve_effective_department_id(current_user, department_id)
+
+        if current_user.role != "ADMIN":
+            if not target_dept_id:
+                return {
+                    "data": [],
+                    "message": "No data found. Please contact admin to assign you to a department.",
+                }
+
+        query = supabase.table("faculty").select("*")
+
+        if current_user.role != "ADMIN":
+            query = query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            query = query.eq("department_id", target_dept_id)
+            
+        response = query.execute()
         return {"data": response.data, "message": "Faculty retrieved successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -785,7 +812,7 @@ async def list_faculty(
 @router.post("/upload", response_model=SuccessResponse)
 async def upload_faculty_csv(
     file: UploadFile = File(...),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Upload and process faculty CSV in bulk."""
     if not file.filename:
@@ -909,7 +936,7 @@ async def upload_faculty_csv(
 @router.post("/load-distribution/preview", response_model=SuccessResponse)
 async def preview_load_distribution_upload(
     file: UploadFile = File(...),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Parse CSV/XLSX and return dynamic table columns/rows for preview."""
     if not file.filename:
@@ -950,7 +977,7 @@ async def preview_load_distribution_upload(
 @router.post("/load-distribution/submit", response_model=SuccessResponse)
 async def submit_load_distribution(
     payload: LoadDistributionSubmitRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Validate uploaded rows and insert into load_distribution table."""
     if not payload.rows:
@@ -958,9 +985,25 @@ async def submit_load_distribution(
 
     try:
         supabase = get_service_supabase()
+        if (
+            not _is_anonymous_mode_user(current_user)
+            and current_user.role != "ADMIN"
+            and not canonical_department_id(current_user.department_id)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Your account has no department. Load distribution cannot be submitted.",
+            )
+
         existing_query = supabase.table("load_distribution").select("load_distribution_id").limit(1)
-        if not _is_anonymous_mode_user(current_user):
+        if _is_anonymous_mode_user(current_user):
             existing_query = existing_query.eq("uploaded_by", current_user.uid)
+        elif current_user.role == "ADMIN":
+            existing_query = existing_query.eq("uploaded_by", current_user.uid)
+        else:
+            existing_query = existing_query.eq(
+                "department_id", canonical_department_id(current_user.department_id)
+            )
         existing_rows = existing_query.execute()
         if existing_rows.data:
             raise HTTPException(
@@ -1007,20 +1050,44 @@ async def submit_load_distribution(
 
 @router.get("/load-distribution", response_model=SuccessResponse)
 async def get_load_distribution(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """Fetch current coordinator load-distribution rows from DB."""
+    """Fetch current coordinator load-distribution rows from DB with department filtering."""
     try:
         supabase = get_service_supabase()
+        
+        # If user has no department, return empty list with helpful message
+        dept_id = canonical_department_id(current_user.department_id)
+        if not dept_id and current_user.role != "ADMIN":
+            return {
+                "data": [],
+                "message": "No load distribution found. Please contact admin to assign you to a department.",
+            }
+
         query = supabase.table("load_distribution").select("*")
-        if not _is_anonymous_mode_user(current_user):
+
+        if _is_anonymous_mode_user(current_user):
             query = query.eq("uploaded_by", current_user.uid)
+        elif current_user.role == "ADMIN":
+            query = query.eq("uploaded_by", current_user.uid)
+        else:
+            query = query.eq("department_id", dept_id)
+        
         response = query.order("created_at", desc=False).execute()
+        
+        # Return helpful message if no data
+        if not response.data:
+            return {
+                "data": [],
+                "message": "No load distribution found. Upload a load distribution file to get started."
+            }
 
         return {
             "data": response.data or [],
             "message": "Load distribution fetched successfully.",
         }
+    except HTTPException:
+        raise
     except Exception as error:
         raise HTTPException(
             status_code=500,
@@ -1030,14 +1097,24 @@ async def get_load_distribution(
 
 @router.delete("/load-distribution", response_model=SuccessResponse)
 async def clear_load_distribution(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Delete current coordinator load-distribution rows from DB."""
     try:
         supabase = get_service_supabase()
         query = supabase.table("load_distribution").delete()
-        if not _is_anonymous_mode_user(current_user):
+        if _is_anonymous_mode_user(current_user):
             query = query.eq("uploaded_by", current_user.uid)
+        elif current_user.role == "ADMIN":
+            query = query.eq("uploaded_by", current_user.uid)
+        else:
+            dept_id = canonical_department_id(current_user.department_id)
+            if not dept_id:
+                return {
+                    "data": {"deleted": 0},
+                    "message": "No load distribution rows deleted (no department on profile).",
+                }
+            query = query.eq("department_id", dept_id)
         response = query.execute()
 
         deleted_count = len(response.data or [])
@@ -1055,11 +1132,11 @@ async def clear_load_distribution(
 @router.get("/{faculty_id}", response_model=SuccessResponse)
 async def get_faculty(
     faculty_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Get a specific faculty member by ID."""
     try:
-        supabase = get_user_supabase()
+        supabase = get_service_supabase()
         response = (
             supabase.table("faculty")
             .select("*")
@@ -1067,8 +1144,16 @@ async def get_faculty(
             .single()
             .execute()
         )
+        row = response.data
+        if current_user.role != "ADMIN":
+            user_d = canonical_department_id(current_user.department_id)
+            if not user_d or canonical_department_id(row.get("department_id")) != user_d:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Faculty not found",
+                )
         return {
-            "data": response.data,
+            "data": row,
             "message": "Faculty retrieved successfully",
         }
     except Exception as e:
@@ -1081,7 +1166,7 @@ async def get_faculty(
 @router.post("", response_model=SuccessResponse)
 async def create_faculty(
     faculty: FacultyCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Create a new faculty member with Auth user and Email notification."""
     try:
@@ -1104,7 +1189,7 @@ async def create_faculty(
 async def update_faculty(
     faculty_id: str,
     faculty: FacultyUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Update a faculty member."""
     try:
@@ -1130,7 +1215,7 @@ async def update_faculty(
 @router.delete("/{faculty_id}", response_model=SuccessResponse)
 async def delete_faculty(
     faculty_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Delete a faculty member."""
     try:
@@ -1163,7 +1248,7 @@ class FacultySubjectAssign(BaseModel):
 @router.get("/{faculty_id}/subjects", response_model=SuccessResponse)
 async def get_faculty_subjects(
     faculty_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Get subjects assigned to a faculty member."""
     try:
@@ -1193,7 +1278,7 @@ async def get_faculty_subjects(
 async def assign_subject_to_faculty(
     faculty_id: str,
     assignment: FacultySubjectAssign,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Assign a subject to a faculty member."""
     try:
@@ -1229,7 +1314,7 @@ async def assign_subject_to_faculty(
 async def unassign_subject_from_faculty(
     faculty_id: str,
     mapping_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Unassign a subject from a faculty member (Delete Mapping)."""
     try:

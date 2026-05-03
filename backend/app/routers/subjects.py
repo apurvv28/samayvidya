@@ -1,7 +1,11 @@
 """Subjects management routes."""
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import (
+    get_current_user_with_profile,
+    CurrentUser,
+    resolve_effective_department_id,
+)
 from app.supabase_client import get_user_supabase, get_service_supabase
 from app.schemas.common import SuccessResponse, SubjectTypeEnum
 
@@ -65,12 +69,25 @@ class SubjectUpdate(BaseModel):
 @router.get("", response_model=SuccessResponse)
 async def list_subjects(
     year: str | None = None,
+    department_id: str | None = None,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """List subjects (Service Role - Bypasses RLS). Optional year filter."""
+    """List subjects with department filtering enforced."""
     try:
-        # Use service client to bypass RLS and ensure visibility
         supabase = get_service_supabase()
-        
+
+        target_dept_id = resolve_effective_department_id(current_user, department_id)
+
+        print(f"[SUBJECTS] User: {current_user.email}, Role: {current_user.role}, Department: {target_dept_id}")
+
+        if current_user.role != "ADMIN":
+            if not target_dept_id:
+                print(f"[SUBJECTS] No department assigned for user {current_user.email}")
+                return {
+                    "data": [],
+                    "message": "No subjects found. Please contact admin to assign you to a department.",
+                }
+
         # Fetch subjects from public.subjects with department name for semester view.
         query = supabase.table("subjects").select(
             "subject_id, subject_name, subject_type, credits, hours_per_week, requires_continuity, "
@@ -78,13 +95,35 @@ async def list_subjects(
             "is_theory_online, is_lab_online, is_tutorial_online, sub_short_form, "
             "departments(department_name)"
         )
-        
+
         if year:
-            query = query.in_("year", _expand_year_aliases(year))
+            query = query.eq("year", year)
+            print(f"[SUBJECTS] Filtering by year: {year}")
+
+        if current_user.role != "ADMIN":
+            query = query.eq("department_id", target_dept_id)
+            print(f"[SUBJECTS] Filtering by department_id: {target_dept_id}")
+        elif target_dept_id:
+            query = query.eq("department_id", target_dept_id)
+            print(f"[SUBJECTS] Admin filter department_id: {target_dept_id}")
             
         response = query.order("subject_name").execute()
+        print(f"[SUBJECTS] Found {len(response.data or [])} subjects")
+        
+        # Return helpful message if no data
+        if not response.data:
+            return {
+                "data": [],
+                "message": "No subjects found. Click 'Add Subject' to create your first subject."
+            }
+        
         return {"data": response.data, "message": "Subjects retrieved successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[SUBJECTS ERROR] {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch subjects: {str(e)}",
@@ -94,7 +133,7 @@ async def list_subjects(
 @router.get("/{subject_id}", response_model=SuccessResponse)
 async def get_subject(
     subject_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Get a specific subject by ID."""
     try:
@@ -120,11 +159,17 @@ async def get_subject(
 @router.post("", response_model=SuccessResponse)
 async def create_subject(
     subject: SubjectCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """Create a new subject (Service Role - Bypasses RLS)."""
+    """Create a new subject with department validation."""
     try:
-        # Use service client to bypass RLS for creation
+        # Validate user can create subjects for this department
+        if current_user.role != "ADMIN" and subject.department_id != current_user.department_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create subjects for your own department",
+            )
+        
         supabase = get_service_supabase()
         response = (
             supabase.table("subjects").insert(subject.model_dump()).execute()
@@ -133,6 +178,8 @@ async def create_subject(
             "data": response.data,
             "message": "Subject created successfully",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -144,7 +191,7 @@ async def create_subject(
 async def update_subject(
     subject_id: str,
     subject: SubjectUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Update a subject."""
     try:
@@ -170,7 +217,7 @@ async def update_subject(
 @router.delete("/{subject_id}", response_model=SuccessResponse)
 async def delete_subject(
     subject_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Delete a subject (Service Role - Bypasses RLS)."""
     try:

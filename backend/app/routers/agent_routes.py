@@ -3,7 +3,11 @@ import json
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from app.config import settings
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import (
+    get_current_user_with_profile,
+    CurrentUser,
+    resolve_effective_department_id,
+)
 from app.supabase_client import get_service_supabase
 from app.schemas.common import SuccessResponse
 from app.services.load_management_agents import LoadManagementCrew
@@ -33,17 +37,32 @@ class TimetableOrchestrationRequest(BaseModel):
 @router.get("/input-readiness", response_model=SuccessResponse)
 async def get_timetable_input_readiness(
     department_id: str | None = None,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """Return preflight readiness details for timetable generation from Supabase master data."""
+    """Return preflight readiness details for timetable generation with department filtering."""
     try:
         supabase = get_service_supabase()
+
+        target_dept_id = resolve_effective_department_id(current_user, department_id)
+
+        if current_user.role != "ADMIN":
+            if not target_dept_id:
+                return {
+                    "data": [],
+                    "message": "No data found. Please contact admin to assign you to a department.",
+                }
 
         load_query = supabase.table("load_distribution").select(
             "faculty_name, year, division, subject, theory_hrs, lab_hrs, tutorial_hrs, batch"
         )
-        if not _is_anonymous_mode_user(current_user):
+
+        if current_user.role != "ADMIN":
+            load_query = load_query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            load_query = load_query.eq("department_id", target_dept_id)
+        elif not _is_anonymous_mode_user(current_user):
             load_query = load_query.eq("uploaded_by", current_user.uid)
+
         load_rows = load_query.execute().data or []
 
         faculty_names_from_load = sorted(
@@ -55,18 +74,24 @@ async def get_timetable_input_readiness(
         )
 
         division_query = supabase.table("divisions").select("division_id, division_name, year, department_id")
-        if department_id:
-            division_query = division_query.eq("department_id", department_id)
+        if current_user.role != "ADMIN":
+            division_query = division_query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            division_query = division_query.eq("department_id", target_dept_id)
         division_rows = division_query.execute().data or []
 
         subject_query = supabase.table("subjects").select("subject_id, subject_name, year, department_id")
-        if department_id:
-            subject_query = subject_query.eq("department_id", department_id)
+        if current_user.role != "ADMIN":
+            subject_query = subject_query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            subject_query = subject_query.eq("department_id", target_dept_id)
         subject_rows = subject_query.execute().data or []
 
         room_query = supabase.table("rooms").select("room_id, room_number, room_type, capacity, department_id, is_active")
-        if department_id:
-            room_query = room_query.eq("department_id", department_id)
+        if current_user.role != "ADMIN":
+            room_query = room_query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            room_query = room_query.eq("department_id", target_dept_id)
         room_rows = [row for row in (room_query.execute().data or []) if row.get("is_active", True)]
 
         departments = (
@@ -233,7 +258,7 @@ async def get_timetable_input_readiness(
 
 @router.post("/seed-defaults", response_model=SuccessResponse)
 async def seed_orchestration_defaults(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Seed default orchestration data: working days, slots, faculty shifts, and division windows."""
     try:
@@ -329,16 +354,24 @@ async def seed_orchestration_defaults(
 @router.post("/generate-faculty-load", response_model=SuccessResponse)
 async def generate_faculty_load(
     department_id: str | None = None,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Summarize load distribution rows for timetable generation."""
     try:
         supabase = get_service_supabase()
 
+        target_dept_id = resolve_effective_department_id(current_user, department_id)
+
         load_query = supabase.table("load_distribution").select(
             "load_distribution_id, faculty_name, year, division, subject, theory_hrs, lab_hrs, tutorial_hrs, batch, total_hrs_per_week, created_at"
         )
-        if not _is_anonymous_mode_user(current_user):
+        if current_user.role != "ADMIN":
+            if not target_dept_id:
+                raise HTTPException(status_code=400, detail="No department context for load distribution.")
+            load_query = load_query.eq("department_id", target_dept_id)
+        elif target_dept_id:
+            load_query = load_query.eq("department_id", target_dept_id)
+        elif not _is_anonymous_mode_user(current_user):
             load_query = load_query.eq("uploaded_by", current_user.uid)
 
         load_rows_res = load_query.execute()
@@ -370,14 +403,20 @@ async def generate_faculty_load(
 @router.post("/create-timetable", response_model=SuccessResponse)
 async def create_timetable_with_agents(
     payload: TimetableOrchestrationRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
     """Run multi-agent orchestration to build a timetable from persisted master data."""
     try:
+        effective_dept = resolve_effective_department_id(current_user, payload.department_id)
+        if current_user.role != "ADMIN" and not effective_dept:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Department is required to generate a timetable.",
+            )
         orchestrator = TimetableOrchestrationEngine()
         result = orchestrator.run(
             user_id=None if _is_anonymous_mode_user(current_user) else current_user.uid,
-            department_id=payload.department_id,
+            department_id=effective_dept,
             persist=not payload.dry_run,
             reason=payload.reason,
         )
@@ -400,7 +439,7 @@ async def create_timetable_with_agents(
 @router.post("/create-timetable/stream")
 async def create_timetable_with_agents_stream(
     payload: TimetableOrchestrationRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
 ):
     """Stream real-time stage updates for timetable orchestration using SSE."""
 
