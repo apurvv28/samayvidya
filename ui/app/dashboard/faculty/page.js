@@ -72,18 +72,19 @@ export default function FacultyDashboard() {
     const fetchData = async () => {
       try {
         setLoadingFaculty(true);
+        const token = localStorage.getItem('authToken') || '';
+        const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
         const [facultyRes, versionsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/faculty`),
-          fetch(`${API_BASE_URL}/timetable-versions`),
+          fetch(`${API_BASE_URL}/faculty`, { headers: authHdr }),
+          fetch(`${API_BASE_URL}/timetable-versions`, { headers: authHdr }),
         ]);
 
         const facultyData = await facultyRes.json();
         const allFaculty = facultyData.data || [];
         setFacultyList(allFaculty);
 
-        const token = localStorage.getItem('authToken') || '';
         const meRes = await fetch(`${API_BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: authHdr,
         });
         const meData = meRes.ok ? await meRes.json() : null;
         const userEmail = String(meData?.data?.email || '').toLowerCase();

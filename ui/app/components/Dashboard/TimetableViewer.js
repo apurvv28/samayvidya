@@ -139,7 +139,16 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
 
   const sortedDays = useMemo(() => {
     const source = days.length ? days : FALLBACK_DAYS;
-    return [...source].sort((a, b) => (a.day_id || 0) - (b.day_id || 0));
+    // Filter out Sunday and non-working days, then sort
+    return [...source]
+      .filter((day) => {
+        const dayName = (day.day_name || '').toLowerCase();
+        // Exclude Sunday explicitly
+        if (dayName === 'sunday') return false;
+        // Only include working days
+        return day.is_working_day === true;
+      })
+      .sort((a, b) => (a.day_id || 0) - (b.day_id || 0));
   }, [days]);
 
   const sortedSlots = useMemo(() => {

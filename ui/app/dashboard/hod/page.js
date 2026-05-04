@@ -77,8 +77,11 @@ export default function HODDashboard() {
           setUserInfo(authData.data);
         }
 
-        // Get timetable versions
-        const versionsResponse = await fetch(`${API_BASE_URL}/timetable-versions`);
+        // Same department-scoped filtering as coordinator; anonymous requests see no versions.
+        const token = localStorage.getItem('authToken') || '';
+        const versionsResponse = await fetch(`${API_BASE_URL}/timetable-versions`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (versionsResponse.ok) {
           const versionsData = await versionsResponse.json();
           const versions = versionsData.data || [];

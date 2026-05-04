@@ -174,7 +174,10 @@ export default function StudentDashboard() {
   useEffect(() => {
     const fetchVersion = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/timetable-versions`);
+        const token = localStorage.getItem('authToken') || '';
+        const response = await fetch(`${API_BASE_URL}/timetable-versions`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (response.ok) {
           const payload = await response.json();
           const versions = payload.data || [];

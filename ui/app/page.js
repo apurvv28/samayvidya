@@ -11,7 +11,6 @@ import Footer from './components/Footer';
 export default function Home() {
   return (
     <div className="min-h-screen bg-white relative">
-      {/* Global background pattern - consistent across all sections */}
       <div className="fixed inset-0 z-0 bg-[linear-gradient(to_right,#80808020_1px,transparent_1px),linear-gradient(to_bottom,#80808020_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
       
       <div className="relative z-[1]">
