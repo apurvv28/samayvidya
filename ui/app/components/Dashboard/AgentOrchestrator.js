@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, BrainCircuit, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useToast } from '../../context/ToastContext';
 
@@ -128,7 +129,18 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
     });
   };
 
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+
+  const confirmGenerateTimetable = () => {
+    if ((readiness?.blocking_issues || []).length > 0 || !planInput.selected_division_ids.length) {
+      handleCreateTimetable(); // will just show errors
+      return;
+    }
+    setShowRegenerateConfirm(true);
+  };
+
   const handleCreateTimetable = async () => {
+    setShowRegenerateConfirm(false);
     if (runLockRef.current) {
       return;
     }
@@ -423,7 +435,7 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
 
           <button
             type="button"
-            onClick={handleCreateTimetable}
+            onClick={confirmGenerateTimetable}
             disabled={running || loadingReadiness || (readiness?.blocking_issues || []).length > 0}
             className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
           >
@@ -515,6 +527,47 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {showRegenerateConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl p-6"
+            >
+              <h3 className="mb-2 text-xl font-bold text-gray-900">Regenerate Timetable?</h3>
+              <p className="mb-6 text-sm text-gray-600">
+                If the timetable is regenerated, the older version will be stored as a draft for 7 days and will be visible in the history icon (beside the notification icon).
+                <br /><br />
+                Drafts are automatically deleted after 7 days from the system.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRegenerateConfirm(false)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateTimetable}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors"
+                >
+                  Confirm Regenerate
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

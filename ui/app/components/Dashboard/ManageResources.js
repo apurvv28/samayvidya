@@ -76,6 +76,11 @@ export default function ManageResources() {
           return;
       }
 
+      if (parseInt(newRoom.capacity) <= 0) {
+          showToast("Capacity must be greater than 0", "error");
+          return;
+      }
+
       try {
           setSubmitting(true);
 

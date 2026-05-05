@@ -103,6 +103,22 @@ export default function Semester() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!formData.subject_id?.trim() || !formData.subject_name?.trim()) {
+      alert("Subject ID and Name cannot be empty.");
+      return;
+    }
+
+    if (parseInt(formData.credits) < 0 || parseInt(formData.hours_per_week) < 0 || parseInt(formData.theory_hours) < 0 || parseInt(formData.lab_hours) < 0 || parseInt(formData.tutorial_hours) < 0) {
+      alert("Credits and hours cannot be negative.");
+      return;
+    }
+
+    if (parseInt(formData.theory_hours) + parseInt(formData.lab_hours) + parseInt(formData.tutorial_hours) !== parseInt(formData.hours_per_week)) {
+      alert("Total of theory, lab, and tutorial hours must equal hours per week.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {

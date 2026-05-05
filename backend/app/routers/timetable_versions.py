@@ -277,7 +277,7 @@ async def audit_timetable_version_conflicts(
 ) -> dict:
     """Slot-level and merged-interval room/faculty overlap check for a saved timetable version."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        supabase = get_service_supabase()
         entries = fetch_timetable_entries_for_version(supabase, version_id)
         slot_rows = supabase.table("time_slots").select("*").order("slot_order").execute().data or []
         days_by_id = {str(d["day_id"]): d for d in (supabase.table("days").select("*").execute().data or [])}
@@ -318,7 +318,7 @@ async def get_timetable_version(
 ) -> dict:
     """Get a specific timetable version by ID."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        supabase = get_service_supabase()
         response = (
             supabase.table("timetable_versions")
             .select("*")
@@ -344,7 +344,7 @@ async def create_timetable_version(
 ) -> dict:
     """Create a new timetable version."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        supabase = get_service_supabase()
         create_data = version.model_dump()
         incoming_meta = {key: create_data.pop(key) for key in _META_KEYS if key in create_data}
         create_data["reason"] = _compose_reason_with_meta(create_data.get("reason"), incoming_meta)
@@ -373,7 +373,7 @@ async def update_timetable_version(
 ) -> dict:
     """Update a timetable version."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        supabase = get_service_supabase()
         update_data = version.model_dump(exclude_unset=True)
         
         # Since wef_date and to_date are actual columns in the database,
@@ -404,7 +404,7 @@ async def delete_timetable_version(
 ) -> dict:
     """Delete a timetable version."""
     try:
-        supabase = get_service_supabase() if _is_anonymous_mode_user(current_user) else get_user_supabase()
+        supabase = get_service_supabase()
         response = (
             supabase.table("timetable_versions")
             .delete()

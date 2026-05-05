@@ -3,14 +3,16 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, Bell } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, Users, PlusCircle, Building2, BookOpen, BrainCircuit, BarChart3, FileText, FilePlus, Bell, History } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import DraftHistoryModal from './DraftHistoryModal';
 
 export default function DashboardNavbar({ role, activeTab, setActiveTab, showNavItems = true, showLogout = true }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const { signOut, profile } = useAuth();
   const router = useRouter();
 
@@ -60,12 +62,13 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab, showNav
   const navItems = getNavItems();
 
   return (
-    <motion.nav
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="fixed top-0 z-50 w-full border-b border-gray-200 bg-white/90 backdrop-blur-md shadow-sm"
-    >
+    <>
+      <motion.nav
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="fixed top-0 z-50 w-full border-b border-gray-200 bg-white/90 backdrop-blur-md shadow-sm"
+      >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -102,8 +105,15 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab, showNav
               
               {showNavItems && <div className="h-6 w-px bg-gray-200 mx-2" />}
               
-              {/* Notification Bell */}
-              <div className="px-2">
+              {/* Notification Bell & History */}
+              <div className="flex items-center gap-2 px-2">
+                <button 
+                  onClick={() => setIsHistoryModalOpen(true)}
+                  className="p-2 text-gray-400 hover:text-gray-900 transition-colors rounded-lg hover:bg-gray-100" 
+                  title="Timetable History"
+                >
+                  <History className="w-5 h-5" />
+                </button>
                 <NotificationBell userEmail={profile?.email} />
               </div>
               
@@ -184,6 +194,12 @@ export default function DashboardNavbar({ role, activeTab, setActiveTab, showNav
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.nav>
+      </motion.nav>
+
+      <DraftHistoryModal 
+        isOpen={isHistoryModalOpen} 
+        onClose={() => setIsHistoryModalOpen(false)} 
+      />
+    </>
   );
 }

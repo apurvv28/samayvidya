@@ -445,10 +445,14 @@ async def create_timetable_with_agents_stream(
 
     def event_stream():
         try:
+            effective_dept = resolve_effective_department_id(current_user, payload.department_id)
+            if current_user.role != "ADMIN" and not effective_dept:
+                raise ValueError("Department is required to generate a timetable.")
+                
             orchestrator = TimetableOrchestrationEngine()
             for event in orchestrator.run_stream(
                 user_id=None if _is_anonymous_mode_user(current_user) else current_user.uid,
-                department_id=payload.department_id,
+                department_id=effective_dept,
                 persist=not payload.dry_run,
                 reason=payload.reason,
             ):

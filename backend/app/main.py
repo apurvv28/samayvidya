@@ -61,6 +61,8 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:8080",
+        "https://samayvidya.vercel.app",  # Production
+        "*" # Allow broader if domain is not setup yet (or we can just wildcard for testing project)
     ],
     allow_credentials=True,
     allow_methods=["*"],

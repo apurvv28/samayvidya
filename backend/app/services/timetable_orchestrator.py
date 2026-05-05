@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from typing import Any, Iterator
 from uuid import uuid4
@@ -366,13 +366,7 @@ class TimetableOrchestrationEngine:
             .data
             or []
         )
-        day_rows = [
-            row
-            for row in day_rows
-            if str(row.get("day_name") or "").strip().casefold() not in {"saturday", "sunday"}
-        ]
-        if len(day_rows) > 5:
-            day_rows = day_rows[:5]
+        
         all_day_rows = (
             self.supabase.table("days")
             .select("day_id, day_name, is_working_day")
@@ -815,7 +809,7 @@ class TimetableOrchestrationEngine:
                 required_parallel_labs_by_division[str(division_id)] = len(batch_ids)
         division_slot_parallel_labs: dict[tuple[str, int, str], list[tuple[str, str]]] = {}
         division_daily_hard_limit = 6
-        faculty_daily_hard_limit = 12
+        faculty_daily_hard_limit = 6
 
         def year_rank(value: str) -> int:
             # Prioritize SY to improve under-allocation in second-year divisions.
@@ -2192,6 +2186,19 @@ class TimetableOrchestrationEngine:
 
         version_id: str | None = None
         if persist and allocated_entries:
+            # First, clean up drafts (is_active = False) older than 7 days
+            try:
+                seven_days_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+                self.supabase.table("timetable_versions").delete().eq("is_active", False).lt("created_at", seven_days_ago).execute()
+            except Exception as e:
+                print(f"Warning: Failed to cleanup old drafts: {e}")
+
+            # Next, mark current active ones to draft (is_active = False)
+            try:
+                self.supabase.table("timetable_versions").update({"is_active": False}).eq("is_active", True).execute()
+            except Exception as e:
+                print(f"Warning: Failed to deactivate previous active versions: {e}")
+
             version_payload = {
                 "created_by": user_id or settings.anonymous_user_id,
                 "reason": reason or f"Agent orchestration run {run_id}",

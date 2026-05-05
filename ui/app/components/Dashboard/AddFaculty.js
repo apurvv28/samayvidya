@@ -102,6 +102,21 @@ export default function AddFaculty() {
       return;
     }
 
+    if (formData.preferred_start_time >= formData.preferred_end_time) {
+      showToast('Preferred end time must be after start time', 'error');
+      return;
+    }
+
+    if (parseInt(formData.min_working_days) > parseInt(formData.max_working_days)) {
+      showToast('Min working days cannot be greater than max working days', 'error');
+      return;
+    }
+
+    if (parseInt(formData.max_load_per_week) < 0 || parseInt(formData.target_theory_load) < 0 || parseInt(formData.target_lab_load) < 0 || parseInt(formData.target_tutorial_load) < 0 || parseInt(formData.target_other_load) < 0) {
+      showToast('Load values cannot be negative', 'error');
+      return;
+    }
+
     if (!formData.department_id) {
       showToast('Department information not found. Please login again.', 'error');
       console.error('[ADD FACULTY] Missing department_id. Profile:', profile);

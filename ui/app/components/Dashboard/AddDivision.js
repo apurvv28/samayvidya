@@ -97,6 +97,21 @@ export default function AddDivision() {
          showToast("Please select a Department", 'error'); 
          return; 
     }
+    
+    if (divisionData.earliest_start_time >= divisionData.latest_end_time) {
+      showToast('End time must be after start time', 'error');
+      return;
+    }
+
+    if (parseInt(divisionData.min_working_days) > parseInt(divisionData.max_working_days)) {
+      showToast('Min working days cannot be greater than max working days', 'error');
+      return;
+    }
+
+    if (parseInt(divisionData.student_count) < 0) {
+      showToast('Student count cannot be negative', 'error');
+      return;
+    }
 
     try {
         setLoading(true);
