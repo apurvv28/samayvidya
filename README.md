@@ -1279,15 +1279,15 @@ Experimental results on real-world university data (6 divisions, 12 faculty, 18 
 ### Faculty Advisor
 
 **Dr. Chandrakant Kokane**, Ph.D.  
-Associate Professor, Department of Computer Science  
+Associate Professor, Department of Computer Science and Engineering (Artificial Intelligence),  
 Vishwakarma Institute of Technology, Pune
 
 ### Contact
 
 - **Email**: apurvsaktepar2806@gmail.com
-- **GitHub**: [github.com/yourusername/samayvidya](https://github.com/apurvv28/samayvidya)
+- **GitHub**: [github.com/apurvv28/samayvidya](https://github.com/apurvv28/samayvidya)
 - **LinkedIn**: Apurv Saktepar
-- **Project Website**: [samayvidya.yourdomain.com](https://samayvidya.vercel.app)
+- **Project Website**: [samayvidya.vercel.app](https://samayvidya.vercel.app)
 
 ---
 
@@ -1296,7 +1296,7 @@ Vishwakarma Institute of Technology, Pune
 We would like to express our gratitude to:
 
 - **Vishwakarma Institute of Technology, Pune** for providing the infrastructure and support for this project
-- **Department of Computer Science** for domain expertise and real-world data
+- **Department of Computer Science and Engineering (Artificial Intelligence)** for domain expertise and real-world data
 - **AWS Educate Program** for providing credits for Bedrock API usage
 - **Supabase** for their excellent open-source database platform
 - **Vercel** for free frontend hosting and deployment
