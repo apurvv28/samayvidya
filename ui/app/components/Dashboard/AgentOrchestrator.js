@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, BrainCircuit, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, BrainCircuit, CheckCircle2, Loader2, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useToast } from '../../context/ToastContext';
@@ -49,6 +49,11 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
   const [readiness, setReadiness] = useState(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
+  const [criticRunning, setCriticRunning] = useState(false);
+  const [criticResult, setCriticResult] = useState(null);
+  const [resolverRunning, setResolverRunning] = useState(false);
+  const [resolverResult, setResolverResult] = useState(null);
+  const [showUnresolvableModal, setShowUnresolvableModal] = useState(false);
   const [planInput, setPlanInput] = useState({
     department_id: '',
     academic_year: '2025-26',
@@ -164,6 +169,8 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
       runLockRef.current = true;
       setRunning(true);
       setResult(null);
+      setCriticResult(null);
+      setResolverResult(null);
 
       const runContext = {
         academic_year: planInput.academic_year,
@@ -268,6 +275,109 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
     } finally {
       setRunning(false);
       runLockRef.current = false;
+    }
+  };
+
+  const handleRunCriticAgent = async () => {
+    try {
+      setCriticRunning(true);
+      setCriticResult(null);
+      setResolverResult(null);
+      const selectedVersionId = result?.version_id || null;
+      const response = await fetch(`${API_BASE_URL}/agents/criticize-timetable`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          version_id: selectedVersionId,
+          department_id: planInput.department_id || null,
+          stress_hour_threshold: 4,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.detail || 'Failed to run Special AI Critic Agent.');
+      }
+      setCriticResult(payload.data || null);
+      showToast('Special AI Critic Agent completed.', 'success');
+    } catch (error) {
+      console.error('Error running critic agent:', error);
+      showToast(error.message || 'Failed to run critic agent.', 'error');
+    } finally {
+      setCriticRunning(false);
+    }
+  };
+
+  const handleSolveIssues = async () => {
+    const selectedVersionId = criticResult?.version_id || result?.version_id || null;
+    try {
+      setResolverRunning(true);
+      setResolverResult(null);
+      setShowUnresolvableModal(false);
+      const response = await fetch(`${API_BASE_URL}/agents/resolve-timetable-issues`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          version_id: selectedVersionId,
+          department_id: planInput.department_id || null,
+          stress_hour_threshold: 4,
+          max_iterations: 6,
+          allow_relax: true,
+          dry_run: false,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const detail = payload?.detail;
+        const message =
+          typeof detail === 'string'
+            ? detail
+            : detail?.message || 'Failed to resolve timetable issues.';
+        if (response.status === 409) {
+          throw new Error(
+            message.includes('frozen')
+              ? `${message} Ask your HOD to unfreeze the timetable from the HOD dashboard.`
+              : message
+          );
+        }
+        throw new Error(message);
+      }
+      const data = payload.data || null;
+      setResolverResult(data);
+      const newVersionId = data?.version_id || data?.resolved_version_id;
+      if (newVersionId && onTimetableCreated) {
+        onTimetableCreated(newVersionId);
+      }
+      if (newVersionId) {
+        setResult((prev) => ({
+          ...(prev || {}),
+          version_id: newVersionId,
+        }));
+      }
+      if (data?.post_critique) {
+        setCriticResult(data.post_critique);
+      }
+      if ((data?.unresolvable || []).length > 0) {
+        setShowUnresolvableModal(true);
+      }
+      showToast('Issue Resolver team completed. Updated timetable version is ready.', 'success');
+    } catch (error) {
+      console.error('Error running issue resolver:', error);
+      showToast(error.message || 'Failed to solve timetable issues.', 'error');
+    } finally {
+      setResolverRunning(false);
+    }
+  };
+
+  const openManualEditForUnresolvable = () => {
+    const entryIds = (resolverResult?.unresolvable || [])
+      .map((row) => row.entry_id)
+      .filter(Boolean);
+    if (entryIds.length && typeof window !== 'undefined') {
+      sessionStorage.setItem('tt_highlight_entries', JSON.stringify(entryIds));
+    }
+    setShowUnresolvableModal(false);
+    if (onViewTimetable) {
+      onViewTimetable();
     }
   };
 
@@ -528,7 +638,243 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
         )}
       </div>
 
+      <div className="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-white to-amber-50 p-5 space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-700 font-semibold">Special AI Critic Agent</p>
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-amber-700" />
+              Timetable Quality Critic
+            </h3>
+            <p className="text-sm text-gray-700 mt-1">
+              Manually critiques generated timetable for conflicts and stress patterns using Amazon Nova Pro.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRunCriticAgent}
+            disabled={criticRunning}
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+          >
+            {criticRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+            {criticRunning ? 'Critic Running...' : 'Run Special AI Critic Agent'}
+          </button>
+        </div>
+
+        {!criticResult ? (
+          <p className="text-sm text-gray-600">
+            Critiques the current generated version if available, otherwise falls back to latest active timetable.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+              {[
+                ['Total issues', criticResult?.summary?.total_issues || 0],
+                ['Critical', criticResult?.summary?.critical || 0],
+                ['High', criticResult?.summary?.high || 0],
+                ['Medium', criticResult?.summary?.medium || 0],
+                ['Low', criticResult?.summary?.low || 0],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-md border-2 border-amber-200 bg-white px-2 py-2">
+                  <p className="text-gray-600 uppercase font-medium">{label}</p>
+                  <p className="text-gray-900 font-semibold text-base">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg border-2 border-gray-200 bg-white p-3 space-y-2">
+              <p className="text-sm font-semibold text-gray-900">Detected Issues</p>
+              {!criticResult?.issues?.length ? (
+                <p className="text-sm text-green-700">No major issues were flagged in this run.</p>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-auto pr-1">
+                  {criticResult.issues.map((issue, index) => (
+                    <div key={`${issue.type}-${index}`} className="rounded-md border border-gray-200 bg-gray-50 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-900">{issue.title}</p>
+                        <span className="text-[11px] uppercase font-semibold text-amber-700">{issue.severity}</span>
+                      </div>
+                      <p className="text-xs text-gray-700 mt-1">{issue.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border-2 border-gray-200 bg-white p-3 space-y-3">
+              <button
+                type="button"
+                onClick={handleSolveIssues}
+                disabled={resolverRunning}
+                className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+              >
+                {resolverRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {resolverRunning ? 'Solving Issues...' : 'Solve Issues'}
+              </button>
+
+              {resolverResult ? (
+                <div className="space-y-3 text-xs text-gray-800">
+                  <p className="font-semibold text-gray-900">Issue Resolver Team Result</p>
+                  {(resolverResult?.resolved_with_relaxation || 0) > 0 ? (
+                    <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-900">
+                      {resolverResult.resolved_with_relaxation} entries were resolved by relaxing soft constraints.
+                      Review highlighted slots.
+                    </p>
+                  ) : null}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                      <p className="text-gray-600">Baseline</p>
+                      <p className="font-semibold">
+                        {resolverResult?.baseline_issues ??
+                          resolverResult?.resolution_summary?.baseline_issues ??
+                          0}
+                      </p>
+                    </div>
+                    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                      <p className="text-gray-600">Remaining</p>
+                      <p className="font-semibold">
+                        {resolverResult?.remaining_issues ??
+                          resolverResult?.resolution_summary?.remaining_issues ??
+                          0}
+                      </p>
+                    </div>
+                    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                      <p className="text-gray-600">Resolved %</p>
+                      <p className="font-semibold">
+                        {resolverResult?.resolution_rate_percent ??
+                          resolverResult?.resolution_summary?.resolution_rate_percent ??
+                          0}
+                        %
+                      </p>
+                    </div>
+                    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                      <p className="text-gray-600">Target (90%)</p>
+                      <p className="font-semibold">
+                        {(resolverResult?.target_met_90_percent ??
+                          resolverResult?.resolution_summary?.target_met_90_percent)
+                          ? 'Met'
+                          : 'Not Met'}
+                      </p>
+                    </div>
+                    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                      <p className="text-gray-600">Target (95%)</p>
+                      <p className="font-semibold">
+                        {(resolverResult?.target_met_95_percent ??
+                          resolverResult?.resolution_summary?.target_met_95_percent)
+                          ? 'Met'
+                          : 'Not Met'}
+                      </p>
+                    </div>
+                  </div>
+                  {(resolverResult?.stages || []).length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {resolverResult.stages.map((stage) => (
+                        <div key={stage.name} className="rounded border border-emerald-200 bg-emerald-50/50 p-2">
+                          <p className="font-medium text-gray-900">{stage.name}</p>
+                          <p className="text-[10px] uppercase text-emerald-700">{stage.status}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p>
+                    New timetable version:{' '}
+                    <span className="font-mono">
+                      {resolverResult?.version_id || resolverResult?.resolved_version_id || 'N/A'}
+                    </span>
+                  </p>
+                  {(resolverResult?.unresolvable || []).length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowUnresolvableModal(true)}
+                      className="text-xs font-semibold text-red-700 underline"
+                    >
+                      View {resolverResult.unresolvable.length} manual resolution item(s)
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-600">
+                  Runs a constraint-aware issue resolver to repair conflicts and stress patterns.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <AnimatePresence>
+        {showUnresolvableModal && resolverResult ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
+            >
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-xl font-bold text-gray-900">Manual Resolution Required</h3>
+                <p className="text-sm text-gray-600 mt-2">
+                  {(resolverResult?.resolution_rate ?? 0) === 0
+                    ? 'Further automatic resolution is not possible for this timetable. All conflicts require manual intervention.'
+                    : `${resolverResult.unresolvable.length} conflict(s) could not be automatically resolved. Please adjust them manually in the timetable editor.`}
+                </p>
+              </div>
+              <div className="overflow-auto p-4">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-gray-600 uppercase">
+                      <th className="py-2 pr-2">Subject</th>
+                      <th className="py-2 pr-2">Faculty</th>
+                      <th className="py-2 pr-2">Division</th>
+                      <th className="py-2 pr-2">Day/Slot</th>
+                      <th className="py-2 pr-2">Session</th>
+                      <th className="py-2 pr-2">Conflict</th>
+                      <th className="py-2 pr-2">Reason</th>
+                      <th className="py-2">Suggested Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(resolverResult.unresolvable || []).map((row) => (
+                      <tr key={`${row.entry_id}-${row.reason}`} className="border-b border-gray-100 align-top">
+                        <td className="py-2 pr-2">{row.subject}</td>
+                        <td className="py-2 pr-2">{row.faculty}</td>
+                        <td className="py-2 pr-2">{row.division}</td>
+                        <td className="py-2 pr-2">
+                          {row.day} / {row.slot}
+                        </td>
+                        <td className="py-2 pr-2">{row.session_type}</td>
+                        <td className="py-2 pr-2">{row.conflict_type}</td>
+                        <td className="py-2 pr-2">{row.reason}</td>
+                        <td className="py-2">{row.suggested_manual_action}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end gap-3 p-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowUnresolvableModal(false)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  onClick={openManualEditForUnresolvable}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700"
+                >
+                  Go to Manual Edit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
         {showRegenerateConfirm && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -542,12 +888,27 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
               exit={{ scale: 0.95, opacity: 0 }}
               className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl p-6"
             >
-              <h3 className="mb-2 text-xl font-bold text-gray-900">Regenerate Timetable?</h3>
-              <p className="mb-6 text-sm text-gray-600">
-                If the timetable is regenerated, the older version will be stored as a draft for 7 days and will be visible in the history icon (beside the notification icon).
-                <br /><br />
-                Drafts are automatically deleted after 7 days from the system.
-              </p>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Regenerate Timetable?</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
+                <p className="text-sm text-red-800 font-medium mb-2">
+                  ⚠️ All existing timetables will be permanently deleted
+                </p>
+                <p className="text-sm text-red-700">
+                  When you regenerate, all previous timetable versions for this department will be immediately and permanently deleted from the system. This includes all draft and active versions.
+                </p>
+              </div>
+              
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
@@ -559,9 +920,9 @@ export default function AgentOrchestrator({ onTimetableCreated, onViewTimetable 
                 <button
                   type="button"
                   onClick={handleCreateTimetable}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors"
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
                 >
-                  Confirm Regenerate
+                  Delete Old & Regenerate
                 </button>
               </div>
             </motion.div>

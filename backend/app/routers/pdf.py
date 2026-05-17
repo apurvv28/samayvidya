@@ -53,6 +53,72 @@ def _safe_filename_part(value: object) -> str:
     return s.replace(" ", "_")[:120]
 
 
+def _slot_start_hour(slot: dict) -> str:
+    return str(slot.get("start_time") or "").split(":")[0]
+
+
+def _build_batch_lunch_labels(batches: list[dict]) -> dict[str, dict[str, list[str]]]:
+    by_division: dict[str, list[tuple[str, str]]] = {}
+    for batch in batches or []:
+        division_id = str(batch.get("division_id") or "")
+        batch_id = str(batch.get("batch_id") or "")
+        if not division_id or not batch_id:
+            continue
+        label = str(batch.get("batch_code") or batch.get("batch_name") or batch_id)
+        by_division.setdefault(division_id, []).append((batch_id, label))
+
+    result: dict[str, dict[str, list[str]]] = {}
+    for division_id, items in by_division.items():
+        ordered = sorted(items, key=lambda item: (item[1].casefold(), item[0]))
+        # Unified lunch break: all batches (b1, b2, b3) use the same lunch slot (12:00-13:00)
+        hour = "12"
+        for _batch_id, label in ordered:
+            result.setdefault(division_id, {}).setdefault(hour, []).append(label)
+    return result
+
+
+def _build_subject_faculty_mapping(entries: list[dict], subj_map: dict, fac_map: dict, section: str) -> dict[str, dict[str, set[str]]]:
+    """
+    Build subject-to-faculty mapping for division timetables.
+    Returns: {subject_name: {'THEORY': {faculty_names}, 'LAB': {faculty_names}}}
+    """
+    if section != "division":
+        return {}
+    
+    mapping: dict[str, dict[str, set[str]]] = {}
+    
+    for entry in entries:
+        subject_id = str(entry.get("subject_id", ""))
+        faculty_id = str(entry.get("faculty_id", ""))
+        session_type = str(entry.get("session_type", "THEORY")).upper().strip()
+        
+        if not subject_id or not faculty_id:
+            continue
+        
+        subject_name = subj_map.get(subject_id, subject_id)
+        faculty_name = fac_map.get(faculty_id, faculty_id)
+        
+        # Normalize session type to THEORY or LAB
+        if session_type in ("LAB", "PRACTICAL"):
+            session_key = "LAB"
+        else:
+            session_key = "THEORY"
+        
+        if subject_name not in mapping:
+            mapping[subject_name] = {"THEORY": set(), "LAB": set()}
+        
+        mapping[subject_name][session_key].add(faculty_name)
+    
+    return mapping
+
+
+def _lunch_labels_for_slot(section: str, group_id: str, slot: dict, batch_lunch_labels: dict[str, dict[str, list[str]]]) -> list[str]:
+    if section != "division":
+        return []
+    labels = batch_lunch_labels.get(str(group_id), {}).get(_slot_start_hour(slot), [])
+    return [f"Lunch: {', '.join(labels)}"] if labels else []
+
+
 def _html_session_badge_style(session_type: str | None) -> str:
     """Inline CSS for session-type chip in HTML timetable preview."""
     t = (session_type or "THEORY").upper().strip()
@@ -104,7 +170,7 @@ def _content_disposition_attachment(filename: str) -> str:
     return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
-def generate_timetable_pdf(entries, days, slots, version_meta, divisions, faculty, subjects, rooms, batches):
+def generate_timetable_pdf(entries, days, slots, version_meta, divisions, faculty, subjects, rooms, batches, section="division", entity_id=None):
     """Generate readable PDF bytes for a timetable using ReportLab."""
 
     if not landscape or not SimpleDocTemplate:
@@ -126,48 +192,58 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
     }
     room_map = {str(r.get("room_id")): r.get("room_name", r.get("room_number", r.get("room_id"))) for r in rooms if r.get("room_id")}
     batch_map = {str(b.get("batch_id")): b.get("batch_code", b.get("batch_name", "")) for b in batches if b.get("batch_id")}
+    batch_lunch_labels = _build_batch_lunch_labels(batches)
 
     sorted_days = sorted(days, key=lambda d: d.get("day_id", 0))
     sorted_slots = sorted(slots, key=lambda s: s.get("slot_order", 0))
 
-    # Group entries by division first to avoid unreadable overlap in each cell.
-    division_entries: dict[str, list[dict]] = {}
-    for entry in entries:
-        division_id = entry.get("division_id")
-        if not division_id:
-            continue
-        division_entries.setdefault(str(division_id), []).append(entry)
+    # Group entries based on section type
+    if section == "faculty" or section == "room":
+        # For faculty/room, create a single timetable showing all their classes
+        grouped_entries: dict[str, list[dict]] = {"all": entries}
+    else:
+        # For division, group by division_id
+        grouped_entries = {}
+        for entry in entries:
+            division_id = entry.get("division_id")
+            if not division_id:
+                continue
+            grouped_entries.setdefault(str(division_id), []).append(entry)
 
-    if not division_entries:
+    if not grouped_entries:
         raise Exception("No timetable entries available for PDF generation")
 
     pdf_buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         pdf_buffer,
         pagesize=landscape(A3),
-        topMargin=0.52 * inch,
-        bottomMargin=0.42 * inch,
-        leftMargin=0.38 * inch,
-        rightMargin=0.38 * inch,
+        # Keep content below the fixed page header ribbon drawn in _draw_page_chrome.
+        # (Header ribbon height ~42pt including accent strip.)
+        topMargin=0.75 * inch,
+        bottomMargin=0.30 * inch,   # Reduced from 0.42
+        leftMargin=0.35 * inch,     # Reduced from 0.38
+        rightMargin=0.35 * inch,    # Reduced from 0.38
     )
     story = []
     styles = getSampleStyleSheet()
 
     generated_timestamp = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
-    # Brand palette (print-friendly, high contrast)
-    brand_primary = colors.HexColor("#0B1F3A")
-    brand_secondary = colors.HexColor("#1565C0")
-    brand_accent = colors.HexColor("#00A896")
-    brand_accent_soft = colors.HexColor("#B2DFDB")
-    bg_soft = colors.HexColor("#E3F2FD")
-    bg_page = colors.HexColor("#EEF3FA")
-    meta_card_bg = colors.HexColor("#F0F7FF")
+    # SamayVidya PDF Theme (Black & White + Royal Blue accents)
+    brand_primary = colors.HexColor("#0B0B0B")   # near-black ink
+    brand_black = colors.HexColor("#000000")
+    brand_royal = colors.HexColor("#1D4ED8")     # royal blue accent
+    brand_royal_dark = colors.HexColor("#1E40AF")
+    bg_page = colors.white
+    bg_soft = colors.HexColor("#F6F7F9")         # light neutral grey
+    bg_soft_alt = colors.HexColor("#EFF1F4")     # alternate row grey
+    meta_card_bg = colors.HexColor("#F5F5F5")
+    border_soft = colors.HexColor("#C7CCD1")
     session_type_colors = {
-        "THEORY": "#1565C0",
-        "LAB": "#00897B",
-        "TUTORIAL": "#6A1B9A",
-        "PRACTICAL": "#00897B",
+        "THEORY": "#1D4ED8",
+        "LAB": "#111827",
+        "TUTORIAL": "#374151",
+        "PRACTICAL": "#111827",
     }
 
     title_style = ParagraphStyle(
@@ -185,7 +261,7 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
         parent=styles["Normal"],
         fontSize=9,
         leading=10,
-        textColor=brand_secondary,
+        textColor=brand_royal,
         alignment=TA_LEFT,
         fontName="Helvetica-Bold",
         spaceAfter=2,
@@ -204,7 +280,7 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
         parent=styles["Normal"],
         fontSize=8.6,
         leading=11,
-        textColor=colors.HexColor("#334155"),
+        textColor=colors.HexColor("#111827"),
         alignment=TA_LEFT,
         spaceAfter=0,
     )
@@ -229,40 +305,46 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
         canvas.saveState()
         page_width, page_height = landscape(A3)
 
-        # Soft page wash
+        # Page background (clean white)
         canvas.setFillColor(bg_page)
         canvas.rect(0, 0, page_width, page_height, stroke=0, fill=1)
 
-        # Top brand ribbon + accent strip
-        canvas.setFillColor(brand_primary)
-        canvas.rect(0, page_height - 30, page_width, 30, stroke=0, fill=1)
-        canvas.setFillColor(brand_accent)
-        canvas.rect(0, page_height - 34, page_width, 4, stroke=0, fill=1)
-        canvas.setFillColor(colors.white)
-        canvas.setFont("Helvetica-Bold", 11)
-        canvas.drawString(doc_obj.leftMargin, page_height - 22, "SamayVidya")
-        canvas.setFont("Helvetica", 8.5)
-        canvas.setFillColor(colors.Color(1, 1, 1, alpha=0.88))
-        canvas.drawRightString(page_width - doc_obj.rightMargin, page_height - 21, "Academic timetable")
+        # Top header ribbon (black) + royal accent strip
+        header_h = 38
+        canvas.setFillColor(brand_black)
+        canvas.rect(0, page_height - header_h, page_width, header_h, stroke=0, fill=1)
+        canvas.setFillColor(brand_royal)
+        canvas.rect(0, page_height - header_h - 4, page_width, 4, stroke=0, fill=1)
 
-        # Decorative accents
-        canvas.setFillColor(colors.Color(0, 0.66, 0.59, alpha=0.12))
-        canvas.circle(page_width - 56, page_height - 54, 26, stroke=0, fill=1)
-        canvas.setFillColor(colors.Color(0.08, 0.4, 0.75, alpha=0.1))
-        canvas.circle(page_width - 18, page_height - 36, 18, stroke=0, fill=1)
-        canvas.setStrokeColor(colors.Color(0.09, 0.41, 0.67, alpha=0.28))
-        canvas.setLineWidth(1.0)
-        canvas.line(doc_obj.leftMargin, page_height - 32, page_width - doc_obj.rightMargin, page_height - 32)
+        # Required header title + subtitle
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 12)
+        canvas.drawString(
+            doc_obj.leftMargin,
+            page_height - 16,
+            "Samayvidya - Agentic AI powered Time Table Scheduler",
+        )
+        canvas.setFont("Helvetica", 8.8)
+        canvas.setFillColor(colors.Color(1, 1, 1, alpha=0.92))
+        canvas.drawString(
+            doc_obj.leftMargin,
+            page_height - 29,
+            "Built by Students of Dept of CSE AI VIT PUNE",
+        )
+
+        canvas.setStrokeColor(border_soft)
+        canvas.setLineWidth(0.8)
+        canvas.line(doc_obj.leftMargin, page_height - header_h - 6, page_width - doc_obj.rightMargin, page_height - header_h - 6)
 
         # Footer
         footer_y = doc_obj.bottomMargin - 12
-        canvas.setStrokeColor(brand_accent_soft)
-        canvas.setLineWidth(1.2)
+        canvas.setStrokeColor(border_soft)
+        canvas.setLineWidth(1.0)
         canvas.line(doc_obj.leftMargin, footer_y + 18, page_width - doc_obj.rightMargin, footer_y + 18)
-        canvas.setStrokeColor(colors.HexColor("#94A3B8"))
+        canvas.setStrokeColor(border_soft)
         canvas.setLineWidth(0.5)
         canvas.line(doc_obj.leftMargin, footer_y + 16, page_width - doc_obj.rightMargin, footer_y + 16)
-        canvas.setFillColor(colors.HexColor("#475569"))
+        canvas.setFillColor(colors.HexColor("#374151"))
         canvas.setFont("Helvetica", 8.2)
         canvas.drawString(doc_obj.leftMargin, footer_y + 2, f"Generated by SamayVidya on {generated_timestamp}")
         canvas.drawRightString(page_width - doc_obj.rightMargin, footer_y + 2, f"Page {canvas.getPageNumber()}")
@@ -276,22 +358,29 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
         return text if text else "-"
 
     division_ids_sorted = sorted(
-        division_entries.keys(),
-        key=lambda division_id: div_map.get(division_id, division_id),
+        grouped_entries.keys(),
+        key=lambda group_id: div_map.get(group_id, group_id) if section == "division" else group_id,
     )
     timetable_div_names_all = _timetable_division_names_caption(entries, divisions)
     content_width = landscape(A3)[0] - doc.leftMargin - doc.rightMargin
 
-    for page_index, division_id in enumerate(division_ids_sorted):
-        division_name = div_map.get(division_id, division_id)
+    for page_index, group_id in enumerate(division_ids_sorted):
+        # Determine title based on section type
+        if section == "faculty" and entity_id:
+            page_title = f"Faculty timetable: {_para_escape(fac_map.get(str(entity_id), entity_id))}"
+        elif section == "room" and entity_id:
+            page_title = f"Room timetable: {_para_escape(room_map.get(str(entity_id), entity_id))}"
+        else:
+            division_name = div_map.get(group_id, group_id)
+            page_title = f"Division timetable: {_para_escape(division_name)}"
+            
         version_name = _safe_meta((version_meta or {}).get("version_name"))
         academic_year = _safe_meta((version_meta or {}).get("academic_year"))
         semester = _safe_meta((version_meta or {}).get("semester"))
         wef_date = _safe_meta((version_meta or {}).get("wef_date"))
         to_date = _safe_meta((version_meta or {}).get("to_date"))
-
-        story.append(Paragraph("SAMAYVIDYA · TIMETABLE EXPORT", brand_style))
-        story.append(Paragraph(f"Division timetable: {_para_escape(division_name)}", title_style))
+        
+        story.append(Paragraph(page_title, title_style))
         story.append(
             Paragraph(
                 f"<font color='#1565C0'><b>Version</b></font> "
@@ -330,9 +419,9 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
             TableStyle(
                 [
                     ("BACKGROUND", (0, 0), (-1, -1), meta_card_bg),
-                    ("BOX", (0, 0), (-1, -1), 1.0, brand_secondary),
-                    ("LINEABOVE", (0, 1), (-1, 1), 0.55, colors.HexColor("#90CAF9")),
-                    ("LINEBEFORE", (1, 0), (1, -1), 0.55, colors.HexColor("#90CAF9")),
+                    ("BOX", (0, 0), (-1, -1), 1.0, brand_royal),
+                    ("LINEABOVE", (0, 1), (-1, 1), 0.55, border_soft),
+                    ("LINEBEFORE", (1, 0), (1, -1), 0.55, border_soft),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 10),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 10),
@@ -353,9 +442,9 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
             )
         story.append(Spacer(1, 0.14 * inch))
 
-        # Build division-local map: (day_id, slot_id) -> entries
+        # Build group-local map: (day_id, slot_id) -> entries
         cell_map: dict[tuple[int | None, str], list[dict]] = {}
-        for entry in division_entries[division_id]:
+        for entry in grouped_entries[group_id]:
             d_id = _norm_day_id(entry.get("day_id"))
             s_id = _norm_slot_id(entry.get("slot_id"))
             if d_id is None or not s_id:
@@ -372,27 +461,61 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
             for slot in sorted_slots:
                 slot_id = _norm_slot_id(slot.get("slot_id"))
                 cell_entries = cell_map.get((day_id, slot_id), []) if day_id is not None else []
+                lunch_labels = _lunch_labels_for_slot(section, group_id, slot, batch_lunch_labels)
                 if not cell_entries:
+                    if lunch_labels:
+                        row.append(
+                            Paragraph(
+                                "<br/>".join(
+                                    f"<font size='6.8' color='#64748B'><b>{_para_escape(label)}</b></font>"
+                                    for label in lunch_labels
+                                ),
+                                cell_style,
+                            )
+                        )
+                        continue
                     row.append("")
                     continue
 
-                lines = []
+                lines = [
+                    f"<font size='6.8' color='#64748B'><b>{_para_escape(label)}</b></font>"
+                    for label in lunch_labels
+                ]
                 # Keep cell compact and readable.
                 for entry in cell_entries[:3]:
                     subj = _para_escape(subj_map.get(str(entry.get("subject_id")), "-"))
                     fac = _para_escape(fac_map.get(str(entry.get("faculty_id")), "-"))
                     room = _para_escape(room_map.get(str(entry.get("room_id")), "-"))
+                    div = _para_escape(div_map.get(str(entry.get("division_id")), "-"))
                     batch_id = entry.get("batch_id")
                     batch_code = _para_escape(batch_map.get(str(batch_id), "")) if batch_id else ""
                     batch_prefix = f"[{batch_code}] " if batch_code else ""
                     stype_raw = str(entry.get("session_type") or "THEORY").upper().strip()
                     stype = _para_escape(stype_raw)
                     stype_color = session_type_colors.get(stype_raw, "#475569")
-                    lines.append(
-                        f"<font size='6' color='{stype_color}'><b>{stype}</b></font> "
-                        f"{batch_prefix}<font color='#0F172A'><b>{subj}</b></font><br/>"
-                        f"<font size='6.5' color='#64748B'>{fac} · {room}</font>"
-                    )
+                    
+                    # Show different info based on section type
+                    if section == "faculty":
+                        # For faculty timetable, show: Subject, Division, Room
+                        lines.append(
+                            f"<font size='6' color='{stype_color}'><b>{stype}</b></font> "
+                            f"{batch_prefix}<font color='#0F172A'><b>{subj}</b></font><br/>"
+                            f"<font size='6.5' color='#64748B'>{div} · {room}</font>"
+                        )
+                    elif section == "room":
+                        # For room timetable, show: Subject, Faculty, Division
+                        lines.append(
+                            f"<font size='6' color='{stype_color}'><b>{stype}</b></font> "
+                            f"{batch_prefix}<font color='#0F172A'><b>{subj}</b></font><br/>"
+                            f"<font size='6.5' color='#64748B'>{fac} · {div}</font>"
+                        )
+                    else:
+                        # For division timetable, show: Subject, Faculty, Room
+                        lines.append(
+                            f"<font size='6' color='{stype_color}'><b>{stype}</b></font> "
+                            f"{batch_prefix}<font color='#0F172A'><b>{subj}</b></font><br/>"
+                            f"<font size='6.5' color='#64748B'>{fac} · {room}</font>"
+                        )
 
                 if len(cell_entries) > 3:
                     lines.append("<font size='6.5' color='#666666'>+ more</font>")
@@ -413,23 +536,23 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
         table.setStyle(
             TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), brand_primary),
+                    ("BACKGROUND", (0, 0), (-1, 0), brand_royal),
                     ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                     ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                     ("FONTSIZE", (0, 0), (-1, 0), 8.5),
                     ("ALIGN", (0, 0), (-1, 0), "CENTER"),
                     ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
-                    ("LINEBELOW", (0, 0), (-1, 0), 2.5, brand_accent),
+                    ("LINEBELOW", (0, 0), (-1, 0), 2.5, brand_royal_dark),
                     ("BACKGROUND", (0, 1), (0, -1), bg_soft),
                     ("TEXTCOLOR", (0, 1), (0, -1), brand_primary),
                     ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
                     ("FONTSIZE", (0, 1), (0, -1), 8.2),
                     ("ALIGN", (0, 1), (0, -1), "CENTER"),
                     ("VALIGN", (0, 1), (0, -1), "MIDDLE"),
-                    ("LINEAFTER", (0, 0), (0, -1), 1.0, brand_secondary),
-                    ("GRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#B0BEC5")),
-                    ("ROWBACKGROUNDS", (1, 1), (-1, -1), [colors.white, colors.HexColor("#F5FAFF")]),
-                    ("LINEBEFORE", (1, 1), (1, -1), 0.55, colors.HexColor("#CFD8DC")),
+                    ("LINEAFTER", (0, 0), (0, -1), 1.0, border_soft),
+                    ("GRID", (0, 0), (-1, -1), 0.45, border_soft),
+                    ("ROWBACKGROUNDS", (1, 1), (-1, -1), [colors.white, bg_soft_alt]),
+                    ("LINEBEFORE", (1, 1), (1, -1), 0.55, border_soft),
                     ("VALIGN", (1, 1), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 4),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -442,9 +565,154 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
         )
 
         story.append(table)
+        
+        # Add subject-to-faculty mapping table for division timetables
+        if section == "division":
+            subject_faculty_mapping = _build_subject_faculty_mapping(
+                grouped_entries[group_id], subj_map, fac_map, section
+            )
+            
+            if subject_faculty_mapping:
+                story.append(Spacer(1, 0.12 * inch))  # Reduced spacing
+                
+                # Add mapping table title
+                mapping_title_style = ParagraphStyle(
+                    "MappingTitle",
+                    parent=styles["Normal"],
+                    fontSize=9,               # Reduced from 10
+                    textColor=brand_royal_dark,
+                    fontName="Helvetica-Bold",
+                    spaceAfter=6,             # Reduced from 8
+                )
+                story.append(Paragraph("Subject - Faculty Mapping", mapping_title_style))
+                
+                # Build mapping rows (not full table yet)
+                mapping_rows = []
+                
+                # Sort subjects alphabetically
+                sorted_subjects = sorted(subject_faculty_mapping.keys())
+                
+                for subject_name in sorted_subjects:
+                    faculty_sets = subject_faculty_mapping[subject_name]
+                    
+                    # Handle THEORY
+                    if faculty_sets["THEORY"]:
+                        theory_faculties = " / ".join(sorted(faculty_sets["THEORY"]))
+                        mapping_rows.append([
+                            f"<font color='#0F172A'>{_para_escape(subject_name)}</font>",
+                            f"<font color='#475569'>{_para_escape(theory_faculties)}</font>"
+                        ])
+                    
+                    # Handle LAB
+                    if faculty_sets["LAB"]:
+                        lab_faculties = " / ".join(sorted(faculty_sets["LAB"]))
+                        mapping_rows.append([
+                            f"<font color='#0F172A'>{_para_escape(subject_name)} Lab</font>",
+                            f"<font color='#475569'>{_para_escape(lab_faculties)}</font>"
+                        ])
+                
+                # Determine if we need 2 columns (if more than 8 rows)
+                use_two_columns = len(mapping_rows) > 8
+                
+                if use_two_columns:
+                    # Split into two columns
+                    mid_point = (len(mapping_rows) + 1) // 2
+                    left_rows = mapping_rows[:mid_point]
+                    right_rows = mapping_rows[mid_point:]
+                    
+                    # Pad right column if needed
+                    while len(right_rows) < len(left_rows):
+                        right_rows.append(["", ""])
+                    
+                    # Build 4-column table (Subject1, Faculty1, Subject2, Faculty2)
+                    mapping_data = [
+                        [
+                            Paragraph("<b>Subject</b>", cell_style),
+                            Paragraph("<b>Faculty</b>", cell_style),
+                            Paragraph("<b>Subject</b>", cell_style),
+                            Paragraph("<b>Faculty</b>", cell_style)
+                        ]
+                    ]
+                    
+                    for left, right in zip(left_rows, right_rows):
+                        mapping_data.append([
+                            Paragraph(left[0], cell_style) if left[0] else "",
+                            Paragraph(left[1], cell_style) if left[1] else "",
+                            Paragraph(right[0], cell_style) if right[0] else "",
+                            Paragraph(right[1], cell_style) if right[1] else ""
+                        ])
+                    
+                    # 4 columns: 22.5%, 27.5%, 22.5%, 27.5%
+                    mapping_col_widths = [
+                        content_width * 0.225,
+                        content_width * 0.275,
+                        content_width * 0.225,
+                        content_width * 0.275
+                    ]
+                    
+                    mapping_table = Table(mapping_data, colWidths=mapping_col_widths, repeatRows=1)
+                    mapping_table.setStyle(
+                        TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, 0), brand_royal),
+                                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                ("FONTSIZE", (0, 0), (-1, 0), 7.5),
+                                ("ALIGN", (0, 0), (-1, 0), "LEFT"),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                ("GRID", (0, 0), (-1, -1), 0.45, border_soft),
+                                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, bg_soft_alt]),
+                                ("LINEBEFORE", (2, 0), (2, -1), 1.2, brand_royal),  # Separator between columns
+                                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                            ]
+                        )
+                    )
+                else:
+                    # Single 2-column table
+                    mapping_data = [
+                        [
+                            Paragraph("<b>Subject</b>", cell_style),
+                            Paragraph("<b>Faculty</b>", cell_style)
+                        ]
+                    ]
+                    
+                    for row in mapping_rows:
+                        mapping_data.append([
+                            Paragraph(row[0], cell_style),
+                            Paragraph(row[1], cell_style)
+                        ])
+                    
+                    # 2 columns: 45%, 55%
+                    mapping_col_widths = [content_width * 0.45, content_width * 0.55]
+                    mapping_table = Table(mapping_data, colWidths=mapping_col_widths, repeatRows=1)
+                    mapping_table.setStyle(
+                        TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, 0), brand_royal),
+                                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                ("FONTSIZE", (0, 0), (-1, 0), 8),
+                                ("ALIGN", (0, 0), (-1, 0), "LEFT"),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                ("GRID", (0, 0), (-1, -1), 0.45, border_soft),
+                                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, bg_soft_alt]),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                            ]
+                        )
+                    )
+                
+                story.append(mapping_table)
+        
+        story.append(Spacer(1, 0.12 * inch))
         story.append(
             Paragraph(
-                "<font color='#00A896'><b>—</b></font> "
+                "<font color='#1D4ED8'><b>—</b></font> "
                 "<font color='#64748B'>Prepared by SamayVidya · Academic timetable engine</font>",
                 footer_style,
             )
@@ -537,7 +805,8 @@ async def download_timetable_pdf(
         # Generate PDF
         pdf_bytes = generate_timetable_pdf(
             entries, days, slots, version_hydrated,
-            divisions, faculty, subjects, rooms, batches
+            divisions, faculty, subjects, rooms, batches,
+            section=section, entity_id=entity_id
         )
         
         # Create file response (null-safe version name)
@@ -649,6 +918,7 @@ async def preview_timetable_html(
         }
         room_map = {str(r.get("room_id")): r.get("room_name", r.get("room_number", r.get("room_id"))) for r in rooms if r.get("room_id")}
         batch_map = {str(b.get("batch_id")): b.get("batch_code", b.get("batch_name", "")) for b in batches if b.get("batch_id")}
+        batch_lunch_labels = _build_batch_lunch_labels(batches)
         
         # Group entries
         cell_map: dict[tuple[int | None, str], list[dict]] = {}
@@ -673,9 +943,15 @@ async def preview_timetable_html(
             for slot in sorted_slots:
                 slot_id = _norm_slot_id(slot.get("slot_id"))
                 cell_entries = cell_map.get((day_id, slot_id), []) if day_id is not None else []
+                division_for_lunch = str(entity_id) if section == "division" and entity_id else (
+                    str(cell_entries[0].get("division_id")) if section == "division" and cell_entries else ""
+                )
+                lunch_labels = _lunch_labels_for_slot(section, division_for_lunch, slot, batch_lunch_labels)
 
-                cell_html = "<td class='pdf-slot'>"
+                cell_html = "<td class='pdf-slot pdf-lunch-slot'>" if lunch_labels else "<td class='pdf-slot'>"
 
+                for label in lunch_labels:
+                    cell_html += f"<div class='pdf-lunch-chip'>{html.escape(label)}</div>"
                 if cell_entries:
                     for entry in cell_entries:
                         subj = html.escape(str(subj_map.get(str(entry.get("subject_id")), "")))
@@ -743,19 +1019,19 @@ async def preview_timetable_html(
             <title>Timetable Preview</title>
             <style>
                 :root {{
-                    --brand: #0B1F3A;
-                    --brand-mid: #1565C0;
-                    --accent: #00A896;
-                    --page: #EEF3FA;
-                    --card: #F0F7FF;
-                    --muted: #475569;
+                    --brand: #000000;
+                    --brand-mid: #1D4ED8;
+                    --accent: #1D4ED8;
+                    --page: #ffffff;
+                    --card: #F5F5F5;
+                    --muted: #374151;
                 }}
                 body {{
                     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
                     margin: 0;
                     padding: 24px 20px 40px;
                     color: #1e293b;
-                    background: linear-gradient(180deg, var(--page) 0%, #e2e8f0 100%);
+                    background: var(--page);
                     min-height: 100vh;
                 }}
                 .pdf-banner {{
@@ -765,7 +1041,7 @@ async def preview_timetable_html(
                     border-radius: 12px;
                     margin-bottom: 18px;
                     border-bottom: 4px solid var(--accent);
-                    box-shadow: 0 8px 24px rgba(11, 31, 58, 0.2);
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
                 }}
                 .pdf-banner h1 {{
                     margin: 0;
@@ -804,7 +1080,7 @@ async def preview_timetable_html(
                     background: #fff;
                     border-radius: 10px;
                     overflow: hidden;
-                    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
                 }}
                 .pdf-th {{
                     background: linear-gradient(90deg, var(--brand) 0%, var(--brand-mid) 100%);
@@ -818,21 +1094,21 @@ async def preview_timetable_html(
                 }}
                 .pdf-th-corner {{ text-align: left; border-left: none; }}
                 .pdf-day {{
-                    background: #E3F2FD;
-                    color: var(--brand);
+                    background: #F5F5F5;
+                    color: #111827;
                     font-weight: 700;
                     padding: 10px 8px;
-                    border: 1px solid #90CAF9;
+                    border: 1px solid #C7CCD1;
                     vertical-align: top;
                     white-space: nowrap;
                 }}
                 .pdf-slot {{
-                    border: 1px solid #B0BEC5;
+                    border: 1px solid #C7CCD1;
                     padding: 6px;
                     vertical-align: top;
-                    background: #fafcff;
+                    background: #ffffff;
                 }}
-                tr:nth-child(even) .pdf-slot {{ background: #f5f9ff; }}
+                tr:nth-child(even) .pdf-slot {{ background: #FAFAFA; }}
                 .pdf-cell-block {{
                     border: 1px solid #cfd8dc;
                     border-radius: 6px;
@@ -845,13 +1121,26 @@ async def preview_timetable_html(
                 .pdf-cell-line2 {{ font-size: 9px; color: #64748b; }}
                 .pdf-subj {{ font-weight: 700; color: #0f172a; }}
                 .pdf-batch {{ color: #546e7a; font-weight: 600; }}
+                .pdf-lunch-slot {{ background: #f1f5f9; }}
+                .pdf-lunch-chip {{
+                    border: 1px solid #cbd5e1;
+                    border-radius: 5px;
+                    background: #e2e8f0;
+                    color: #475569;
+                    font-size: 9px;
+                    font-weight: 700;
+                    text-align: center;
+                    text-transform: uppercase;
+                    padding: 4px 5px;
+                    margin-bottom: 5px;
+                }}
                 .pdf-empty-cell {{ min-height: 52px; }}
                 .no-print {{
                     margin: 12px 0 20px;
                     text-align: center;
                 }}
                 .no-print button {{
-                    background: linear-gradient(90deg, #0d9488 0%, #0891b2 100%);
+                    background: linear-gradient(90deg, #000000 0%, #1D4ED8 100%);
                     color: #fff;
                     border: none;
                     padding: 12px 22px;
@@ -859,7 +1148,7 @@ async def preview_timetable_html(
                     font-weight: 600;
                     border-radius: 10px;
                     cursor: pointer;
-                    box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35);
+                    box-shadow: 0 4px 14px rgba(29, 78, 216, 0.25);
                 }}
                 .no-print button:hover {{ filter: brightness(1.06); }}
                 @media print {{
@@ -873,8 +1162,8 @@ async def preview_timetable_html(
                 <button type="button" onclick="window.print()">Print / Save as PDF</button>
             </div>
             <div class="pdf-banner">
-                <h1>SamayVidya · Timetable preview</h1>
-                <p>Academic timetable overview — use Print to save as PDF.</p>
+                <h1>samayvidya - agentic ai powered time table scheduler</h1>
+                <p>Built by Students of Dept of CSE AI VIT PUNE</p>
             </div>
             {metadata_html}
             <table>
@@ -893,4 +1182,3 @@ async def preview_timetable_html(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"HTML generation failed: {str(e)}")
-

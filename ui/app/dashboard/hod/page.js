@@ -10,14 +10,16 @@ import RoleGuard from '../../components/RoleGuard';
 import { useAuth } from '../../context/AuthContext';
 import {
   CheckCircle2, Calendar, Users, BarChart3, AlertCircle,
-  FileText, Loader2, XCircle, Clock, Trash2, Check, X, LayoutDashboard, LogOut, UserCircle, ExternalLink
+  FileText, Loader2, XCircle, Clock, Trash2, Check, X, LayoutDashboard, LogOut, UserCircle, ExternalLink, Lock, Unlock
 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export default function HODDashboard() {
   const router = useRouter();
   const { signOut } = useAuth();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [userInfo, setUserInfo] = useState(null);
   const [timetableVersions, setTimetableVersions] = useState([]);
@@ -45,6 +47,64 @@ export default function HODDashboard() {
   const [loadingLeaves, setLoadingLeaves] = useState(false);
   const [leavesError, setLeavesError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null); // leave_id being acted on
+  const [unfreezingTimetable, setUnfreezingTimetable] = useState(false);
+
+  const frozenVersion = timetableVersions.find(
+    (v) => v.is_frozen && v.approval_status === 'HOD_APPROVED'
+  ) || timetableVersions.find((v) => v.is_frozen);
+
+  const refreshTimetableVersions = async () => {
+    const token = localStorage.getItem('authToken') || '';
+    const versionsResponse = await fetch(`${API_BASE_URL}/timetable-versions`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!versionsResponse.ok) return;
+    const versionsData = await versionsResponse.json();
+    const versions = versionsData.data || [];
+    setTimetableVersions(versions);
+    if (versions.length > 0) {
+      setLatestVersionId(versions[0].version_id);
+    }
+  };
+
+  const handleUnfreezeTimetable = async (versionId) => {
+    const targetId = versionId || frozenVersion?.version_id || latestVersionId;
+    if (!targetId) {
+      showToast('No timetable version selected to unfreeze.', 'error');
+      return;
+    }
+    if (
+      !confirm(
+        'Unfreeze this timetable? Coordinators will be able to regenerate, edit, and run issue resolution again.'
+      )
+    ) {
+      return;
+    }
+    try {
+      setUnfreezingTimetable(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(
+        `${API_BASE_URL}/timetable-versions/${encodeURIComponent(targetId)}/unfreeze`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to unfreeze timetable.');
+      }
+      showToast('Timetable unfrozen. Coordinators can modify or regenerate it now.', 'success');
+      await refreshTimetableVersions();
+    } catch (err) {
+      showToast(err.message || 'Failed to unfreeze timetable.', 'error');
+    } finally {
+      setUnfreezingTimetable(false);
+    }
+  };
 
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -78,19 +138,7 @@ export default function HODDashboard() {
         }
 
         // Same department-scoped filtering as coordinator; anonymous requests see no versions.
-        const token = localStorage.getItem('authToken') || '';
-        const versionsResponse = await fetch(`${API_BASE_URL}/timetable-versions`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (versionsResponse.ok) {
-          const versionsData = await versionsResponse.json();
-          const versions = versionsData.data || [];
-          setTimetableVersions(versions);
-          
-          if (versions.length > 0) {
-            setLatestVersionId(versions[0].version_id);
-          }
-        }
+        await refreshTimetableVersions();
 
         setLoading(false);
       } catch (err) {
@@ -238,6 +286,48 @@ export default function HODDashboard() {
   const pendingLeaves = allLeaves.filter(l => l.status === 'PENDING');
   const processedLeaves = allLeaves.filter(l => l.status !== 'PENDING');
 
+  const renderFrozenTimetableBanner = () => {
+    if (!frozenVersion) return null;
+    return (
+      <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center flex-shrink-0">
+              <Lock className="w-5 h-5 text-orange-700" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Timetable is frozen</h3>
+              <p className="text-sm text-gray-700 mt-1">
+                This approved timetable is locked. Coordinators cannot regenerate or run automatic issue resolution until you unfreeze it.
+              </p>
+              {frozenVersion.wef_date && frozenVersion.to_date ? (
+                <p className="text-xs text-orange-800 mt-2">
+                  Valid: {frozenVersion.wef_date} → {frozenVersion.to_date}
+                </p>
+              ) : null}
+              <p className="text-xs text-gray-500 mt-1 font-mono break-all">
+                Version: {frozenVersion.version_id}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleUnfreezeTimetable(frozenVersion.version_id)}
+            disabled={unfreezingTimetable}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-orange-600 bg-white px-4 py-2.5 text-sm font-semibold text-orange-700 hover:bg-orange-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+          >
+            {unfreezingTimetable ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Unlock className="w-4 h-4" />
+            )}
+            {unfreezingTimetable ? 'Unfreezing...' : 'Unfreeze Timetable'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const isPdfProof = (url) => String(url || '').toLowerCase().includes('.pdf');
   const isImageProof = (url) => {
     const value = String(url || '').toLowerCase();
@@ -258,6 +348,8 @@ export default function HODDashboard() {
                 Monitor timetables and manage faculty leave requests for your department
               </p>
             </div>
+
+            {renderFrozenTimetableBanner()}
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -347,10 +439,16 @@ export default function HODDashboard() {
 
       case 'timetable':
         return (
-          <div className="w-full max-w-6xl">
+          <div className="w-full max-w-6xl space-y-4">
+            {renderFrozenTimetableBanner()}
             <TimetableViewer
               versionId={latestVersionId}
               onVersionChange={(newVersionId) => setLatestVersionId(newVersionId)}
+              onVersionMetaChange={(meta) => {
+                if (meta && !meta.is_frozen) {
+                  refreshTimetableVersions();
+                }
+              }}
               canManageTimetable
             />
           </div>

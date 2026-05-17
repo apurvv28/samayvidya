@@ -104,6 +104,9 @@ export default function FacultyDashboard() {
         const versions = versionsData.data || [];
         if (versions.length > 0) {
           setLatestVersionId(versions[0].version_id);
+        } else {
+          // No frozen timetable available
+          setLatestVersionId(null);
         }
       } catch (err) {
         console.error('Failed to load faculty data:', err);

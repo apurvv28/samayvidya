@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 import json
+import logging
+import traceback
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from app.config import settings
@@ -11,6 +13,9 @@ from app.dependencies.auth import (
 from app.supabase_client import get_service_supabase
 from app.schemas.common import SuccessResponse
 from app.services.load_management_agents import LoadManagementCrew
+from app.services.timetable_critic_agent import TimetableCriticAgent
+from app.services.timetable_issue_resolver import TimetableIssueResolver
+from app.services.timetable_scheduling_types import ResolverIntegrityError
 from app.services.timetable_orchestrator import (
     TimetableOrchestrationEngine,
     _division_base_name,
@@ -31,6 +36,21 @@ def _is_anonymous_mode_user(current_user: CurrentUser) -> bool:
 class TimetableOrchestrationRequest(BaseModel):
     department_id: str | None = None
     reason: str | None = None
+    dry_run: bool = False
+
+
+class TimetableCritiqueRequest(BaseModel):
+    version_id: str | None = None
+    department_id: str | None = None
+    stress_hour_threshold: int = 4
+
+
+class TimetableIssueResolveRequest(BaseModel):
+    version_id: str | None = None
+    department_id: str | None = None
+    stress_hour_threshold: int = 4
+    max_iterations: int = 6
+    allow_relax: bool = True
     dry_run: bool = False
 
 
@@ -485,3 +505,139 @@ async def create_timetable_with_agents_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/criticize-timetable", response_model=SuccessResponse)
+async def criticize_timetable_with_special_agent(
+    payload: TimetableCritiqueRequest,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
+) -> dict:
+    """Run Special AI Critic Agent for a generated timetable version."""
+    try:
+        supabase = get_service_supabase()
+        effective_department = resolve_effective_department_id(current_user, payload.department_id)
+
+        target_version_id = payload.version_id
+        if not target_version_id:
+            version_query = (
+                supabase.table("timetable_versions")
+                .select("version_id, created_by, is_active, created_at")
+                .eq("is_active", True)
+                .order("created_at", desc=True)
+                .limit(1)
+            )
+            if current_user.role != "ADMIN":
+                if effective_department:
+                    # department filter is handled indirectly through generated data ownership;
+                    # fallback to creator scope for non-admin users where department-specific
+                    # version metadata is not present.
+                    pass
+                if not _is_anonymous_mode_user(current_user):
+                    version_query = version_query.eq("created_by", current_user.uid)
+
+            rows = version_query.execute().data or []
+            if not rows:
+                raise ValueError("No active timetable version found for critique.")
+            target_version_id = rows[0].get("version_id")
+
+        critic = TimetableCriticAgent(supabase)
+        critique = critic.analyze(
+            version_id=str(target_version_id),
+            stress_hour_threshold=max(2, int(payload.stress_hour_threshold or 4)),
+        )
+        return {
+            "data": critique,
+            "message": "Special AI Critic Agent analysis completed successfully.",
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Timetable critique failed: {str(e)}",
+        )
+
+
+@router.post("/resolve-timetable-issues", response_model=SuccessResponse)
+async def resolve_timetable_issues_with_special_team(
+    payload: TimetableIssueResolveRequest,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
+) -> dict:
+    """Run issue resolver team and persist a repaired timetable version."""
+    try:
+        supabase = get_service_supabase()
+        effective_department = resolve_effective_department_id(current_user, payload.department_id)
+
+        target_version_id = payload.version_id
+        if not target_version_id:
+            version_query = (
+                supabase.table("timetable_versions")
+                .select("version_id, created_by, is_active, created_at")
+                .eq("is_active", True)
+                .order("created_at", desc=True)
+                .limit(1)
+            )
+            if current_user.role != "ADMIN":
+                if effective_department:
+                    pass
+                if not _is_anonymous_mode_user(current_user):
+                    version_query = version_query.eq("created_by", current_user.uid)
+            rows = version_query.execute().data or []
+            if not rows:
+                raise ValueError("No active timetable version found for issue resolution.")
+            target_version_id = rows[0].get("version_id")
+
+        source_version = (
+            supabase.table("timetable_versions")
+            .select("version_id, is_frozen, approval_status")
+            .eq("version_id", str(target_version_id))
+            .single()
+            .execute()
+            .data
+        ) or {}
+        if source_version.get("is_frozen"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot resolve issues on a frozen timetable version.",
+            )
+
+        resolver = TimetableIssueResolver(supabase)
+        result = resolver.resolve(
+            version_id=str(target_version_id),
+            user_id=None if _is_anonymous_mode_user(current_user) else current_user.uid,
+            stress_hour_threshold=max(2, int(payload.stress_hour_threshold or 4)),
+            max_iterations=max(1, int(payload.max_iterations or 6)),
+            allow_relax=bool(payload.allow_relax),
+            dry_run=bool(payload.dry_run),
+            department_id=effective_department,
+        )
+        return {
+            "data": result,
+            "message": "Issue resolver team completed timetable repair run.",
+        }
+    except ResolverIntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": str(e),
+                "resolver_introduced_violations": [
+                    {"entry_id": v.entry_id, "reason": v.reason} for v in (e.violations or [])
+                ],
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error("Issue resolver failed with traceback:\n%s", traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Issue resolver failed: {str(e)}",
+        )

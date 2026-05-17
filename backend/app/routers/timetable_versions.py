@@ -235,20 +235,59 @@ async def list_timetable_versions(
                     "message": "No timetables found. Please contact admin to assign you to a department.",
                 }
 
-        query = supabase.table("timetable_versions").select("*").order("created_at", desc=True)
+        query = supabase.table("timetable_versions").select("*")
 
         if current_user.role != "ADMIN":
             query = query.eq("department_id", target_dept_id)
             print(f"[TIMETABLE_VERSIONS] Filtering by department_id: {target_dept_id}")
         elif target_dept_id:
             query = query.eq("department_id", target_dept_id)
+        
+        # Students and Faculty should only see frozen/approved timetables
+        if current_user.role in ["STUDENT", "FACULTY"]:
+            query = query.eq("is_frozen", True).eq("approval_status", "HOD_APPROVED")
+            print(f"[TIMETABLE_VERSIONS] Filtering for frozen+approved timetables only (role: {current_user.role})")
             
         response = query.execute()
         rows = [_hydrate_version_row(row) for row in (response.data or [])]
+        
+        # Sort to show the correct latest version:
+        # Priority 1: Frozen/Approved timetables (HOD_APPROVED + is_frozen) - these are FINAL
+        # Priority 2: Active timetables that are not frozen - working drafts
+        # Priority 3: Approved but inactive timetables - archived approved versions
+        # Priority 4: Other timetables - drafts, rejected, etc.
+        def sort_key(row):
+            is_active = row.get("is_active", False)
+            is_frozen = row.get("is_frozen", False)
+            is_approved = row.get("approval_status") == "HOD_APPROVED"
+            created_at = row.get("created_at", "")
+            
+            # Frozen + Approved timetables are FINAL and should always be shown first
+            if is_frozen and is_approved:
+                priority = 4
+            elif is_active:
+                priority = 3
+            elif is_approved:
+                priority = 2
+            else:
+                priority = 1
+            
+            # Return tuple for sorting: higher priority first, then newer created_at first
+            return (-priority, created_at)
+        
+        # Sort with reverse=True to get newest created_at first within each priority
+        rows.sort(key=sort_key, reverse=True)
         print(f"[TIMETABLE_VERSIONS] Found {len(rows)} timetable versions")
+        if rows:
+            print(f"[TIMETABLE_VERSIONS] Latest version: {rows[0].get('version_id')} (active={rows[0].get('is_active')}, frozen={rows[0].get('is_frozen')}, status={rows[0].get('approval_status')}, created={rows[0].get('created_at')})")
         
         # Return helpful message if no data
         if not rows:
+            if current_user.role in ["STUDENT", "FACULTY"]:
+                return {
+                    "data": [],
+                    "message": "No approved timetable available yet. Please wait for the HOD to approve the timetable."
+                }
             return {
                 "data": [],
                 "message": "No timetables found. Generate a timetable to get started."
@@ -402,9 +441,11 @@ async def delete_timetable_version(
     version_id: str,
     current_user: CurrentUser = Depends(get_current_user_with_profile),
 ) -> dict:
-    """Delete a timetable version."""
+    """Delete a timetable version and its associated entries."""
     try:
         supabase = get_service_supabase()
+        # Delete child timetable_entries first to satisfy foreign key constraint
+        supabase.table("timetable_entries").delete().eq("version_id", version_id).execute()
         response = (
             supabase.table("timetable_versions")
             .delete()
@@ -769,6 +810,99 @@ async def extend_timetable_validity(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extend timetable: {str(e)}"
+        )
+
+
+@router.post("/{version_id}/unfreeze", response_model=SuccessResponse)
+async def unfreeze_timetable_version(
+    version_id: str,
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
+) -> dict:
+    """HOD unfreezes a timetable to allow modifications or regeneration."""
+    try:
+        supabase = get_service_supabase()
+        
+        # Check if user is HOD or ADMIN
+        if current_user.role not in ["HOD", "ADMIN"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only HOD can unfreeze timetables"
+            )
+        
+        # Get current timetable
+        version_response = (
+            supabase.table("timetable_versions")
+            .select("*")
+            .eq("version_id", version_id)
+            .single()
+            .execute()
+        )
+        
+        if not version_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timetable version not found"
+            )
+        
+        version_data = version_response.data
+        
+        # Check if timetable is frozen
+        if not version_data.get("is_frozen"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Timetable is not frozen"
+            )
+        
+        # Unfreeze the timetable
+        response = (
+            supabase.table("timetable_versions")
+            .update({
+                "is_frozen": False,
+                "frozen_at": None,
+            })
+            .eq("version_id", version_id)
+            .execute()
+        )
+        
+        # Notify coordinator about unfreeze
+        dept_id = version_data.get("department_id")
+        if dept_id:
+            try:
+                coordinators_response = (
+                    supabase.table("user_profiles")
+                    .select("email")
+                    .eq("department_id", dept_id)
+                    .eq("role", "COORDINATOR")
+                    .execute()
+                )
+                
+                for coordinator in (coordinators_response.data or []):
+                    if coordinator.get("email"):
+                        try:
+                            supabase.table("notification_log").insert({
+                                "notification_type": "TIMETABLE_UNFROZEN",
+                                "recipient_email": coordinator["email"],
+                                "recipient_type": "COORDINATOR",
+                                "subject": "Timetable Unfrozen",
+                                "body": "The HOD has unfrozen the timetable. You can now make modifications or regenerate it.",
+                                "status": "SENT"
+                            }).execute()
+                        except Exception as e:
+                            print(f"Failed to send coordinator notification: {e}")
+            except Exception as e:
+                print(f"Failed to notify coordinators: {e}")
+        
+        return {
+            "data": _hydrate_version_row(response.data[0] if response.data else {}),
+            "message": "Timetable unfrozen successfully. You can now make modifications or regenerate."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unfreeze timetable: {str(e)}"
         )
 
 

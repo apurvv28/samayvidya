@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Search, RefreshCw, Eye, X, FileDown, Pencil, Save, Check } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { Loader2, Search, RefreshCw, Eye, X, FileDown, Pencil, Save, Check, Calendar } from 'lucide-react';
 
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -17,13 +17,13 @@ function authHeaders(extra = {}) {
 }
 
 const FALLBACK_DAYS = [
-  { day_id: 1, day_name: 'Sunday', is_working_day: false },
-  { day_id: 2, day_name: 'Monday', is_working_day: true },
-  { day_id: 3, day_name: 'Tuesday', is_working_day: true },
-  { day_id: 4, day_name: 'Wednesday', is_working_day: true },
-  { day_id: 5, day_name: 'Thursday', is_working_day: true },
-  { day_id: 6, day_name: 'Friday', is_working_day: true },
-  { day_id: 7, day_name: 'Saturday', is_working_day: false },
+  { day_id: 1, day_name: 'Monday', is_working_day: true },
+  { day_id: 2, day_name: 'Tuesday', is_working_day: true },
+  { day_id: 3, day_name: 'Wednesday', is_working_day: true },
+  { day_id: 4, day_name: 'Thursday', is_working_day: true },
+  { day_id: 5, day_name: 'Friday', is_working_day: true },
+  { day_id: 6, day_name: 'Saturday', is_working_day: false },
+  { day_id: 7, day_name: 'Sunday', is_working_day: false },
 ];
 
 const FALLBACK_SLOTS = [
@@ -64,6 +64,45 @@ function getSlotKey(slot) {
   return slot?.slot_id || `${slot?.start_time || ''}-${slot?.end_time || ''}`;
 }
 
+function getSlotHour(slot) {
+  return String(slot?.start_time || '').split(':')[0];
+}
+
+function buildDivisionBatchLunchMap(batchRows) {
+  const byDivision = new Map();
+  (batchRows || []).forEach((batch) => {
+    const divisionId = batch?.division_id ? String(batch.division_id) : '';
+    const batchId = batch?.batch_id ? String(batch.batch_id) : '';
+    if (!divisionId || !batchId) {
+      return;
+    }
+    if (!byDivision.has(divisionId)) {
+      byDivision.set(divisionId, []);
+    }
+    byDivision.get(divisionId).push({
+      id: batchId,
+      code: String(batch.batch_code || batch.batch_name || batchId),
+    });
+  });
+
+  const result = new Map();
+  byDivision.forEach((items, divisionId) => {
+    const sorted = [...items].sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id));
+    // Unified lunch break: all batches (b1, b2, b3) use the same lunch slot (12:00-13:00)
+    const lunchHour = '12';
+    sorted.forEach((batch) => {
+      if (!result.has(divisionId)) {
+        result.set(divisionId, new Map());
+      }
+      if (!result.get(divisionId).has(lunchHour)) {
+        result.get(divisionId).set(lunchHour, []);
+      }
+      result.get(divisionId).get(lunchHour).push(batch.code);
+    });
+  });
+  return result;
+}
+
 /** Tailwind classes for session-type pill on light timetable cards */
 function sessionTypeBadgeClass(sessionType) {
   const t = String(sessionType || 'THEORY').toUpperCase();
@@ -87,7 +126,15 @@ function sortByCountThenName(a, b) {
   return String(a.label || '').localeCompare(String(b.label || ''));
 }
 
-export default function TimetableViewer({ versionId, onVersionChange, canManageTimetable = false, forcedDivisionId = null, facultyFilterId = null, showOnlyFacultyView = false }) {
+export default function TimetableViewer({
+  versionId,
+  onVersionChange,
+  onVersionMetaChange,
+  canManageTimetable = false,
+  forcedDivisionId = null,
+  facultyFilterId = null,
+  showOnlyFacultyView = false,
+}) {
   const { showToast } = useToast();
   const { profile } = useAuth();
 
@@ -105,6 +152,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
   const [departments, setDepartments] = useState([]);
   const [facultyRows, setFacultyRows] = useState([]);
   const [roomRows, setRoomRows] = useState([]);
+  const [batchRows, setBatchRows] = useState([]);
 
   const [divisionNameMap, setDivisionNameMap] = useState(new Map());
   const [facultyNameMap, setFacultyNameMap] = useState(new Map());
@@ -130,25 +178,30 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [extendingTimetable, setExtendingTimetable] = useState(false);
   const [newToDate, setNewToDate] = useState('');
+  const [unfreezingTimetable, setUnfreezingTimetable] = useState(false);
 
   const canEditTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
   const canVerifyTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
   const canApproveTimetable = canManageTimetable && ['HOD', 'ADMIN'].includes(profile?.role);
   const canDeleteTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
   const canExtendTimetable = canManageTimetable && ['COORDINATOR', 'ADMIN'].includes(profile?.role);
+  const canUnfreezeTimetable = canManageTimetable && ['HOD', 'ADMIN'].includes(profile?.role);
 
   const sortedDays = useMemo(() => {
     const source = days.length ? days : FALLBACK_DAYS;
-    // Filter out Sunday and non-working days, then sort
-    return [...source]
+    console.log('[TimetableViewer] All days from source:', source);
+    // Filter out Sunday only, include all other days
+    const filtered = [...source]
       .filter((day) => {
         const dayName = (day.day_name || '').toLowerCase();
         // Exclude Sunday explicitly
-        if (dayName === 'sunday') return false;
-        // Only include working days
-        return day.is_working_day === true;
+        const shouldInclude = dayName !== 'sunday';
+        console.log(`[TimetableViewer] Day ${dayName}: shouldInclude=${shouldInclude}`);
+        return shouldInclude;
       })
       .sort((a, b) => (a.day_id || 0) - (b.day_id || 0));
+    console.log('[TimetableViewer] Filtered and sorted days:', filtered);
+    return filtered;
   }, [days]);
 
   const sortedSlots = useMemo(() => {
@@ -166,6 +219,11 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     names.sort((a, b) => a.localeCompare(b));
     return names.join(', ');
   }, [entries, divisionNameMap]);
+
+  const onVersionMetaChangeRef = useRef(onVersionMetaChange);
+  useEffect(() => {
+    onVersionMetaChangeRef.current = onVersionMetaChange;
+  }, [onVersionMetaChange]);
 
   const fetchTimetableData = useCallback(async (targetVersionId) => {
     if (!targetVersionId) {
@@ -232,6 +290,13 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         scopedEntries = allEntries.filter((entry) => String(entry.faculty_id) === String(facultyFilterId));
       }
       
+      console.log('[TimetableViewer] Fetched days from API:', daysJson.data);
+      console.log('[TimetableViewer] Total entries:', scopedEntries.length);
+      console.log('[TimetableViewer] Entries by day:', scopedEntries.reduce((acc, e) => {
+        acc[e.day_id] = (acc[e.day_id] || 0) + 1;
+        return acc;
+      }, {}));
+      
       setEntries(scopedEntries);
       setDays((daysJson.data || []).length ? (daysJson.data || []) : FALLBACK_DAYS);
       setSlots((slotsJson.data || []).length ? (slotsJson.data || []) : FALLBACK_SLOTS);
@@ -239,6 +304,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       setDepartments(departmentsJson.data || []);
       setFacultyRows(facultyJson.data || []);
       setRoomRows(roomsJson.data || []);
+      setBatchRows(batchesJson.data || []);
 
       setDivisionNameMap(makeLookupMap(divisionsJson.data || [], 'division_id', 'division_name'));
       setFacultyNameMap(makeLookupMap(facultyJson.data || [], 'faculty_id', 'faculty_name'));
@@ -246,7 +312,11 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
       setSubjectShortMap(makeLookupMap(subjectsJson.data || [], 'subject_id', 'sub_short_form'));
       setBatchCodeMap(makeLookupMap(batchesJson.data || [], 'batch_id', 'batch_code'));
       setRoomNameMap(makeLookupMap(roomsJson.data || [], 'room_id', 'room_number'));
-      setVersionMeta((versionsJson.data || []).find((item) => item.version_id === targetVersionId) || null);
+      const meta = (versionsJson.data || []).find((item) => item.version_id === targetVersionId) || null;
+      setVersionMeta(meta);
+      if (onVersionMetaChangeRef.current) {
+        onVersionMetaChangeRef.current(meta);
+      }
     } catch (error) {
       console.error('Error loading timetable viewer data:', error);
       showToast(error.message || 'Failed to load timetable.', 'error');
@@ -365,6 +435,23 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     return map;
   }, [modalEntries]);
 
+  const divisionBatchLunchMap = useMemo(() => buildDivisionBatchLunchMap(batchRows), [batchRows]);
+
+  const getLunchBreakLabels = useCallback((slot) => {
+    const hour = getSlotHour(slot);
+    // Only 12:00-13:00 is lunch break (unified for all batches)
+    if (hour !== '12') {
+      return [];
+    }
+
+    if (modalState.section === 'division' && modalState.entityId) {
+      const labels = divisionBatchLunchMap.get(String(modalState.entityId))?.get(hour) || [];
+      return labels.length ? [`Lunch: ${labels.join(', ')}`] : ['Lunch'];
+    }
+
+    return [];
+  }, [divisionBatchLunchMap, modalState]);
+
   const modalTitle = useMemo(() => {
     if (!modalState.open) {
       return 'Timetable';
@@ -379,6 +466,17 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
   }, [modalState, divisionNameMap, roomNameMap, facultyNameMap]);
 
   const handleRegenerate = async () => {
+    // Show confirmation dialog
+    const confirmed = confirm(
+      '⚠️ WARNING: All existing timetables will be permanently deleted!\n\n' +
+      'When you regenerate, all previous timetable versions for this department will be immediately and permanently deleted from the system.\n\n' +
+      'This action cannot be undone. Do you want to continue?'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+    
     try {
       setRegenerating(true);
       const response = await fetch(`${API_BASE_URL}/agents/create-timetable`, {
@@ -405,7 +503,7 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         onVersionChange(newVersionId);
       }
       await fetchTimetableData(newVersionId);
-      showToast('Timetable regenerated successfully.', 'success');
+      showToast('Timetable regenerated successfully. Old timetables have been deleted.', 'success');
     } catch (error) {
       console.error('Regenerate timetable error:', error);
       showToast(error.message || 'Failed to regenerate timetable.', 'error');
@@ -799,6 +897,44 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
     }
   };
 
+  const handleUnfreezeTimetable = async () => {
+    if (!versionId) return;
+    
+    if (!confirm('Are you sure you want to unfreeze this timetable? This will allow coordinators to regenerate or modify it.')) {
+      return;
+    }
+    
+    try {
+      setUnfreezingTimetable(true);
+      const token = localStorage.getItem('authToken') || '';
+      const response = await fetch(`${API_BASE_URL}/timetable-versions/${encodeURIComponent(versionId)}/unfreeze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || 'Failed to unfreeze timetable.');
+      }
+
+      const nextMeta = { ...(versionMeta || {}), is_frozen: false, frozen_at: null };
+      setVersionMeta(nextMeta);
+      if (onVersionMetaChange) {
+        onVersionMetaChange(nextMeta);
+      }
+      showToast('Timetable unfrozen successfully. Coordinators can now make changes.', 'success');
+      await fetchTimetableData(versionId);
+    } catch (error) {
+      console.error('Unfreeze timetable error:', error);
+      showToast(error.message || 'Failed to unfreeze timetable.', 'error');
+    } finally {
+      setUnfreezingTimetable(false);
+    }
+  };
+
   const getApprovalStatusBadge = () => {
     const status = versionMeta?.approval_status || 'DRAFT';
     const isFrozen = versionMeta?.is_frozen || false;
@@ -869,6 +1005,22 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
         @page { size: landscape; margin: 10mm; }
       `}</style>
 
+      {/* Show message when no timetable is available */}
+      {!versionId && !loading && (
+        <div className="rounded-2xl border-2 border-gray-200 bg-gray-50 p-8 text-center">
+          <div className="mx-auto w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center mb-4">
+            <Calendar className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Timetable Available</h3>
+          <p className="text-sm text-gray-600">
+            {profile?.role === 'STUDENT' || profile?.role === 'FACULTY' 
+              ? 'No approved timetable is available yet. Please wait for the HOD to approve the timetable.'
+              : 'No timetables found. Generate a timetable to get started.'}
+          </p>
+        </div>
+      )}
+
+      {versionId && (
       <div className="space-y-5">
         <div className="rounded-2xl border-2 border-gray-100 bg-white p-4 md:p-5">
           <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between mb-4">
@@ -890,6 +1042,18 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                 </button>
               )}
               
+              {canUnfreezeTimetable && versionMeta?.is_frozen && (
+                <button
+                  type="button"
+                  disabled={unfreezingTimetable || loading}
+                  onClick={handleUnfreezeTimetable}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-orange-600 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {unfreezingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Unfreeze Timetable
+                </button>
+              )}
+
               {/* HOD: Approve button (COORDINATOR_VERIFIED status only) */}
               {canApproveTimetable && versionMeta?.approval_status === 'COORDINATOR_VERIFIED' && (
                 <>
@@ -952,17 +1116,32 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                   Valid from {versionMeta.wef_date} to {versionMeta.to_date}
                 </p>
               )}
-              {canExtendTimetable && versionMeta?.is_frozen && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewToDate(versionMeta?.to_date || '');
-                    setShowExtendModal(true);
-                  }}
-                  className="mt-2 inline-flex items-center gap-2 rounded-lg border-2 border-yellow-600 bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-100 transition-colors"
-                >
-                  Extend Validity Period
-                </button>
+              {versionMeta?.is_frozen && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {canExtendTimetable && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewToDate(versionMeta?.to_date || '');
+                        setShowExtendModal(true);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg border-2 border-yellow-600 bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-100 transition-colors"
+                    >
+                      Extend Validity Period
+                    </button>
+                  )}
+                  {canUnfreezeTimetable && (
+                    <button
+                      type="button"
+                      disabled={unfreezingTimetable}
+                      onClick={handleUnfreezeTimetable}
+                      className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-600 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {unfreezingTimetable ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      Unfreeze Timetable
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -1100,8 +1279,8 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
             {renderCardList('Faculty Timetables', 'faculty', filteredCards.faculty)}
           </div>
         )}
-      </div>
 
+      {/* Modal for viewing specific timetable */}
       {modalState.open ? (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 md:p-8 overflow-auto">
           <div className="w-full max-w-7xl rounded-2xl border-2 border-gray-200 bg-white shadow-2xl print-target">
@@ -1170,12 +1349,21 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
                         <td className="p-2 text-teal-900 border-2 border-gray-300 bg-teal-50 font-semibold whitespace-nowrap align-top">{getDayLabel(day)}</td>
                         {sortedSlots.map((slot) => {
                           const entryList = modalCellMap.get(`${day.day_id}::${getSlotKey(slot)}`) || [];
+                          const isEmpty = entryList.length === 0;
+                          const lunchBreakLabels = getLunchBreakLabels(slot);
+                          const isLunchGap = lunchBreakLabels.length > 0;
+
                           return (
-                            <td key={`${day.day_id}-${getSlotKey(slot)}`} className="align-top p-1.5 border-2 border-gray-300 text-gray-900 bg-gray-50">
-                              {entryList.length === 0 ? (
-                                <div className="min-h-14" />
+                            <td key={`${day.day_id}-${getSlotKey(slot)}`} className={`align-top p-1.5 border-2 border-gray-300 text-gray-900 ${isLunchGap ? 'bg-slate-100/60' : 'bg-gray-50'}`}>
+                              {isEmpty && !isLunchGap ? (
+                                  <div className="min-h-14" />
                               ) : (
                                 <div className="space-y-1 min-h-14">
+                                  {lunchBreakLabels.map((label) => (
+                                    <div key={`${day.day_id}-${getSlotKey(slot)}-${label}`} className="rounded border border-slate-300 bg-slate-100 px-1.5 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                                      {label}
+                                    </div>
+                                  ))}
                                   {entryList.map((entry, index) => {
                                     const merged = getMergedEntry(entry);
                                     // Try to get subject name from nested object first, then fall back to maps
@@ -1403,6 +1591,8 @@ export default function TimetableViewer({ versionId, onVersionChange, canManageT
             </div>
           </div>
         </div>
+      )}
+      </div>
       )}
     </>
   );

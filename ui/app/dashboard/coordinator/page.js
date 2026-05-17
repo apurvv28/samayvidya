@@ -80,8 +80,6 @@ export default function CoordinatorDashboard() {
       return;
     }
 
-    let cancelled = false;
-
     const refreshLatestVersion = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/timetable-versions`, {
@@ -94,7 +92,8 @@ export default function CoordinatorDashboard() {
         const payload = await response.json();
         const versionRows = payload.data || [];
         const latestVersion = versionRows[0];
-        if (!cancelled && latestVersion?.version_id && latestVersion.version_id !== latestVersionId) {
+        // Always update to the latest version from the server
+        if (latestVersion?.version_id) {
           setLatestVersionId(latestVersion.version_id);
         }
       } catch (error) {
@@ -103,11 +102,7 @@ export default function CoordinatorDashboard() {
     };
 
     refreshLatestVersion();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, latestVersionId]);
+  }, [activeTab]);
 
   const getTabIcon = () => {
     switch (activeTab) {

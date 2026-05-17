@@ -183,6 +183,9 @@ export default function StudentDashboard() {
           const versions = payload.data || [];
           if (versions.length > 0) {
             setLatestVersionId(versions[0].version_id);
+          } else {
+            // No frozen timetable available
+            setLatestVersionId(null);
           }
         }
       } catch (err) {
