@@ -407,8 +407,12 @@ class TimetableCriticAgent:
         findings: list[dict[str, Any]] = []
         room_slot = conflict_report.get("slot_level_room_conflicts") or []
         faculty_slot = conflict_report.get("slot_level_faculty_conflicts") or []
+        batch_slot = conflict_report.get("slot_level_batch_conflicts") or []
         room_interval = conflict_report.get("interval_room_overlaps") or []
         faculty_interval = conflict_report.get("interval_faculty_overlaps") or []
+        batch_interval = conflict_report.get("interval_batch_overlaps") or []
+        subject_dups = conflict_report.get("subject_daily_duplicates") or []
+        consecutive_theory = conflict_report.get("consecutive_theory_violations") or []
 
         if room_slot:
             findings.append(
@@ -430,6 +434,16 @@ class TimetableCriticAgent:
                     "evidence": [c.get("labels", [])[:2] for c in faculty_slot[:3]],
                 }
             )
+        if batch_slot:
+            findings.append(
+                {
+                    "type": "batch_double_booking",
+                    "severity": "critical",
+                    "title": "Batch double booking detected",
+                    "description": f"{len(batch_slot)} slot-level student batch/division conflicts found.",
+                    "evidence": [c.get("labels", [])[:2] for c in batch_slot[:3]],
+                }
+            )
         if room_interval:
             findings.append(
                 {
@@ -448,6 +462,50 @@ class TimetableCriticAgent:
                     "title": "Faculty interval overlap detected",
                     "description": f"{len(faculty_interval)} merged-interval faculty overlaps found.",
                     "evidence": [f"{c['a']['label']} || {c['b']['label']}" for c in faculty_interval[:3]],
+                }
+            )
+        if batch_interval:
+            findings.append(
+                {
+                    "type": "batch_overlap",
+                    "severity": "high",
+                    "title": "Batch interval overlap detected",
+                    "description": f"{len(batch_interval)} merged-interval student batch overlaps found.",
+                    "evidence": [f"{c['a']['label']} || {c['b']['label']}" for c in batch_interval[:3]],
+                }
+            )
+        if subject_dups:
+            findings.append(
+                {
+                    "type": "subject_daily_duplicate",
+                    "severity": "medium",
+                    "title": "Subject daily cap exceeded (duplicate theory)",
+                    "description": f"{len(subject_dups)} instances of duplicate theory sessions of the same subject on the same day for a division.",
+                    "evidence": [c.get("label") for c in subject_dups[:4]],
+                }
+            )
+        if consecutive_theory:
+            findings.append(
+                {
+                    "type": "consecutive_same_subject_theory",
+                    "severity": "high",
+                    "title": "Consecutive theory sessions of same subject",
+                    "description": f"{len(consecutive_theory)} instances of consecutive theory sessions of the same subject on the same day for a division.",
+                    "evidence": [f"{c['a']['label']} & {c['b']['label']}" for c in consecutive_theory[:4]],
+                }
+            )
+        consecutive_heavy = conflict_report.get("consecutive_heavy_subject_violations") or []
+        if consecutive_heavy:
+            findings.append(
+                {
+                    "type": "consecutive_heavy_subject_theory",
+                    "severity": "high",
+                    "title": "Consecutive cognitively-heavy theory subjects",
+                    "description": (
+                        f"{len(consecutive_heavy)} instances of consecutive heavy/core theory subjects "
+                        f"(e.g. ML, ADSAA, DCAN, DL, CSAB) placed back-to-back without a lighter session in between."
+                    ),
+                    "evidence": [f"{c['a']['label']} & {c['b']['label']}" for c in consecutive_heavy[:4]],
                 }
             )
         return findings

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+import re
 from typing import Any
 
 
@@ -176,6 +177,41 @@ def entry_row_label(
     return f"{dn} {t0}-{t1} | {div}{bc} | {e.get('session_type')} | {sn} | {fn} | {rn}"
 
 
+def _batches_overlap(bid_a: str | None, bid_b: str | None) -> bool:
+    if bid_a is None or bid_b is None:
+        return True
+    return bid_a == bid_b
+
+
+def is_heavy_subject(subject_id: str, subjects_by_id: dict[str, dict]) -> bool:
+    if not subject_id:
+        return False
+    row = subjects_by_id.get(str(subject_id))
+    if not row:
+        return False
+    sub_name = str(row.get("subject_name") or "").upper()
+    sub_id_upper = str(subject_id).upper()
+    
+    heavy_acronyms = {"ML", "ADSAA", "DCAN", "DL", "CSAB"}
+    for acr in heavy_acronyms:
+        if acr in sub_id_upper or acr in sub_name:
+            return True
+        pattern = rf"\b{acr}\b"
+        if re.search(pattern, sub_id_upper) or re.search(pattern, sub_name):
+            return True
+    heavy_names = [
+        "MACHINE LEARNING",
+        "DESIGN AND ANALYSIS OF ALGORITHMS",
+        "DATA COMMUNICATION AND COMPUTER NETWORKS",
+        "DEEP LEARNING",
+        "CRYPTOGRAPHY AND SYSTEM SECURITY"
+    ]
+    for hn in heavy_names:
+        if hn in sub_name:
+            return True
+    return False
+
+
 def audit_timetable_conflicts(
     *,
     entries: list[dict],
@@ -189,12 +225,21 @@ def audit_timetable_conflicts(
 ) -> dict[str, Any]:
     """Return structured conflict lists (empty when timetable is clean)."""
     slot_by_id = {str(s["slot_id"]): s for s in slot_rows}
+    slot_order = {str(s["slot_id"]): int(s.get("slot_order") or 0) for s in slot_rows}
 
     by_room_slot: dict[tuple, list[dict]] = defaultdict(list)
     by_fac_slot: dict[tuple, list[dict]] = defaultdict(list)
+    by_div_slot: dict[tuple, list[dict]] = defaultdict(list)
+    by_div_day_subj: dict[tuple, list[dict]] = defaultdict(list)
+
     for e in entries:
         by_room_slot[(e["day_id"], e["slot_id"], e["room_id"])].append(e)
         by_fac_slot[(e["day_id"], e["slot_id"], e["faculty_id"])].append(e)
+        by_div_slot[(e["day_id"], e["slot_id"], e["division_id"])].append(e)
+        
+        stype = str(e.get("session_type") or "THEORY").upper().strip()
+        if stype == "THEORY":
+            by_div_day_subj[(e["division_id"], e["day_id"], e["subject_id"])].append(e)
 
     slot_room_conflicts: list[dict[str, Any]] = []
     for (day_id, slot_id, room_id), lst in by_room_slot.items():
@@ -250,9 +295,177 @@ def audit_timetable_conflicts(
                 }
             )
 
+    slot_batch_conflicts: list[dict[str, Any]] = []
+    for (day_id, slot_id, division_id), lst in by_div_slot.items():
+        has_div_wide = any(x.get("batch_id") is None for x in lst)
+        if has_div_wide and len(lst) > 1:
+            slot_batch_conflicts.append(
+                {
+                    "day_id": day_id,
+                    "slot_id": str(slot_id),
+                    "division_id": str(division_id),
+                    "entry_ids": [str(x["entry_id"]) for x in lst],
+                    "labels": [
+                        entry_row_label(
+                            x,
+                            slot_by_id=slot_by_id,
+                            days=days_by_id,
+                            rooms=rooms_by_id,
+                            faculty=faculty_by_id,
+                            divisions=divisions_by_id,
+                            subjects=subjects_by_id,
+                            batch_code_by_id=batch_code_by_id,
+                        )
+                        for x in lst
+                    ],
+                }
+            )
+        else:
+            batch_counts = defaultdict(list)
+            for x in lst:
+                if x.get("batch_id"):
+                    batch_counts[str(x["batch_id"])].append(x)
+            for b_id, b_lst in batch_counts.items():
+                if len(b_lst) > 1:
+                    slot_batch_conflicts.append(
+                        {
+                            "day_id": day_id,
+                            "slot_id": str(slot_id),
+                            "division_id": str(division_id),
+                            "batch_id": b_id,
+                            "entry_ids": [str(x["entry_id"]) for x in b_lst],
+                            "labels": [
+                                entry_row_label(
+                                    x,
+                                    slot_by_id=slot_by_id,
+                                    days=days_by_id,
+                                    rooms=rooms_by_id,
+                                    faculty=faculty_by_id,
+                                    divisions=divisions_by_id,
+                                    subjects=subjects_by_id,
+                                    batch_code_by_id=batch_code_by_id,
+                                )
+                                for x in b_lst
+                            ],
+                        }
+                    )
+
     blocks = merge_entry_blocks(entries, slot_rows)
+
+    subject_daily_duplicates: list[dict[str, Any]] = []
+    consecutive_theory_violations: list[dict[str, Any]] = []
+    consecutive_heavy_subject_violations: list[dict[str, Any]] = []
+
+    theory_blocks = [b for b in blocks if str(b.session_type).upper().strip() == "THEORY"]
+    by_div_day_subj_blocks = defaultdict(list)
+    for b in theory_blocks:
+        by_div_day_subj_blocks[(b.division_id, b.day_id, b.subject_id)].append(b)
+
+    for (division_id, day_id, subject_id), b_list in by_div_day_subj_blocks.items():
+        if len(b_list) > 2:
+            div_name = divisions_by_id.get(str(division_id), {}).get("division_name", division_id)
+            subj_name = subjects_by_id.get(str(subject_id), {}).get("subject_name", subject_id)
+            day_name = days_by_id.get(str(day_id), {}).get("day_name", f"Day {day_id}")
+            
+            all_entry_ids = []
+            for b in b_list:
+                all_entry_ids.extend(b.entry_ids)
+                
+            subject_daily_duplicates.append(
+                {
+                    "division_id": str(division_id),
+                    "day_id": day_id,
+                    "subject_id": str(subject_id),
+                    "entry_ids": all_entry_ids,
+                    "label": f"Division {div_name} has {len(b_list)} theory sessions of {subj_name} on {day_name}",
+                }
+            )
+            
+        if len(b_list) > 1:
+            b_list_sorted = sorted(b_list, key=lambda x: x.start_m)
+            for k in range(len(b_list_sorted) - 1):
+                b1 = b_list_sorted[k]
+                b2 = b_list_sorted[k + 1]
+                if b2.start_m == b1.end_m:
+                    consecutive_theory_violations.append(
+                        {
+                            "division_id": str(division_id),
+                            "day_id": day_id,
+                            "subject_id": str(subject_id),
+                            "a": {
+                                "entry_id": b1.entry_ids[0],
+                                "label": block_label(
+                                    b1,
+                                    days=days_by_id,
+                                    rooms=rooms_by_id,
+                                    faculty=faculty_by_id,
+                                    divisions=divisions_by_id,
+                                    subjects=subjects_by_id,
+                                    batch_code_by_id=batch_code_by_id,
+                                ),
+                            },
+                            "b": {
+                                "entry_id": b2.entry_ids[0],
+                                "label": block_label(
+                                    b2,
+                                    days=days_by_id,
+                                    rooms=rooms_by_id,
+                                    faculty=faculty_by_id,
+                                    divisions=divisions_by_id,
+                                    subjects=subjects_by_id,
+                                    batch_code_by_id=batch_code_by_id,
+                                ),
+                            },
+                        }
+                    )
+
+    # Check for consecutive heavy theory subjects (avoid consecutive cognitively heavy subjects)
+    by_div_day_blocks = defaultdict(list)
+    for b in theory_blocks:
+        by_div_day_blocks[(b.division_id, b.day_id)].append(b)
+
+    for (division_id, day_id), b_list in by_div_day_blocks.items():
+        b_list_sorted = sorted(b_list, key=lambda x: x.start_m)
+        for k in range(len(b_list_sorted) - 1):
+            b1 = b_list_sorted[k]
+            b2 = b_list_sorted[k + 1]
+            if b2.start_m == b1.end_m:
+                if b1.subject_id != b2.subject_id:
+                    if is_heavy_subject(b1.subject_id, subjects_by_id) and is_heavy_subject(b2.subject_id, subjects_by_id):
+                        consecutive_heavy_subject_violations.append(
+                            {
+                                "division_id": str(division_id),
+                                "day_id": day_id,
+                                "a": {
+                                    "entry_id": b1.entry_ids[0],
+                                    "label": block_label(
+                                        b1,
+                                        days=days_by_id,
+                                        rooms=rooms_by_id,
+                                        faculty=faculty_by_id,
+                                        divisions=divisions_by_id,
+                                        subjects=subjects_by_id,
+                                        batch_code_by_id=batch_code_by_id,
+                                    ),
+                                },
+                                "b": {
+                                    "entry_id": b2.entry_ids[0],
+                                    "label": block_label(
+                                        b2,
+                                        days=days_by_id,
+                                        rooms=rooms_by_id,
+                                        faculty=faculty_by_id,
+                                        divisions=divisions_by_id,
+                                        subjects=subjects_by_id,
+                                        batch_code_by_id=batch_code_by_id,
+                                    ),
+                                },
+                            }
+                        )
     interval_room: list[dict[str, Any]] = []
     interval_faculty: list[dict[str, Any]] = []
+    interval_batch: list[dict[str, Any]] = []
+    
     for i, a in enumerate(blocks):
         for b in blocks[i + 1 :]:
             if a.room_id == b.room_id and a.division_id != b.division_id and _intervals_overlap(a, b):
@@ -317,15 +530,58 @@ def audit_timetable_conflicts(
                         },
                     }
                 )
+            if a.division_id == b.division_id and _intervals_overlap(a, b) and _batches_overlap(a.batch_id, b.batch_id):
+                interval_batch.append(
+                    {
+                        "division_id": a.division_id,
+                        "a": {
+                            "entry_ids": list(a.entry_ids),
+                            "label": block_label(
+                                a,
+                                days=days_by_id,
+                                rooms=rooms_by_id,
+                                faculty=faculty_by_id,
+                                divisions=divisions_by_id,
+                                subjects=subjects_by_id,
+                                batch_code_by_id=batch_code_by_id,
+                            ),
+                        },
+                        "b": {
+                            "entry_ids": list(b.entry_ids),
+                            "label": block_label(
+                                b,
+                                days=days_by_id,
+                                rooms=rooms_by_id,
+                                faculty=faculty_by_id,
+                                divisions=divisions_by_id,
+                                subjects=subjects_by_id,
+                                batch_code_by_id=batch_code_by_id,
+                            ),
+                        },
+                    }
+                )
 
     return {
         "entry_count": len(entries),
         "block_count": len(blocks),
         "slot_level_room_conflicts": slot_room_conflicts,
         "slot_level_faculty_conflicts": slot_faculty_conflicts,
+        "slot_level_batch_conflicts": slot_batch_conflicts,
         "interval_room_overlaps": interval_room,
         "interval_faculty_overlaps": interval_faculty,
+        "interval_batch_overlaps": interval_batch,
+        "subject_daily_duplicates": subject_daily_duplicates,
+        "consecutive_theory_violations": consecutive_theory_violations,
+        "consecutive_heavy_subject_violations": consecutive_heavy_subject_violations,
         "has_conflicts": bool(
-            slot_room_conflicts or slot_faculty_conflicts or interval_room or interval_faculty
+            slot_room_conflicts
+            or slot_faculty_conflicts
+            or slot_batch_conflicts
+            or interval_room
+            or interval_faculty
+            or interval_batch
+            or subject_daily_duplicates
+            or consecutive_theory_violations
+            or consecutive_heavy_subject_violations
         ),
     }

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 
 
@@ -9,6 +9,7 @@ import hashlib
 from datetime import datetime, timedelta
 
 import re
+import copy
 
 from typing import Any, Iterator
 
@@ -596,7 +597,7 @@ class TimetableOrchestrationEngine:
 
             token = "|".join(str(part) for part in parts)
 
-            digest = hashlib.sha1(f"{run_id}|{token}".encode("utf-8")).hexdigest()
+            digest = hashlib.sha1(f"{run_id}|{attempt_idx}|{token}".encode("utf-8")).hexdigest()
 
             return int(digest[:8], 16)
 
@@ -1576,6 +1577,342 @@ class TimetableOrchestrationEngine:
 
 
 
+        attempt_idx = 0
+
+        def is_heavy_subject(subject_id: str) -> bool:
+            if not subject_id:
+                return False
+            row = subject_by_code_fallback.get(str(subject_id).casefold())
+            if not row:
+                return False
+            sub_name = str(row.get("subject_name") or "").upper()
+            sub_id_upper = str(subject_id).upper()
+            
+            heavy_acronyms = {"ML", "ADSAA", "DCAN", "DL", "CSAB"}
+            for acr in heavy_acronyms:
+                if acr in sub_id_upper or acr in sub_name:
+                    return True
+                pattern = rf"\b{acr}\b"
+                if re.search(pattern, sub_id_upper) or re.search(pattern, sub_name):
+                    return True
+            heavy_names = [
+                "MACHINE LEARNING",
+                "DESIGN AND ANALYSIS OF ALGORITHMS",
+                "DATA COMMUNICATION AND COMPUTER NETWORKS",
+                "DEEP LEARNING",
+                "CRYPTOGRAPHY AND SYSTEM SECURITY"
+            ]
+            for hn in heavy_names:
+                if hn in sub_name:
+                    return True
+            return False
+
+        def is_adjacent_to_heavy_subject(task: _SessionTask, day_id: int, slot_ids: list[str]) -> bool:
+            if task.session_type != "THEORY" or not is_heavy_subject(task.subject_id):
+                return False
+            candidate_orders = [slot_order_by_id.get(sid, 0) for sid in slot_ids]
+            for (div_id, sub_id, d_id), orders in division_subject_day_slot_orders.items():
+                if div_id == task.division_id and d_id == day_id:
+                    if sub_id != task.subject_id and is_heavy_subject(sub_id):
+                        for co in candidate_orders:
+                            if (co - 1) in orders or (co + 1) in orders:
+                                return True
+            return False
+
+        def clear_all_state():
+            used_division_full_slot.clear()
+            used_division_any_batch_slot.clear()
+            used_division_batch_slot.clear()
+            division_slot_lab_subjects.clear()
+            used_faculty_slot.clear()
+            used_room_slot.clear()
+            division_day_slots.clear()
+            division_day_slot_orders.clear()
+            division_batch_day_slot_orders.clear()
+            division_day_theory_lab_hours.clear()
+            faculty_day_theory_lab_hours.clear()
+            faculty_load_counter.clear()
+            room_usage_counter.clear()
+            scheduled_task_assignments.clear()
+            unresolved_task_pool.clear()
+            lab_group_slot_binding.clear()
+            division_slot_parallel_labs.clear()
+            division_subject_day_slot_orders.clear()
+            nonlocal unresolved_tasks, candidate_rejections, unresolved_task_samples, repack_moves
+            unresolved_tasks = 0
+            candidate_rejections = 0
+            unresolved_task_samples.clear()
+            repack_moves = 0
+
+        def compute_quality_score(assignments: dict) -> dict:
+            room_slot_counts = {}
+            fac_slot_counts = {}
+            for key, val in assignments.items():
+                day_id = val["day_id"]
+                room_id = val["room_id"]
+                fac_id = val["task"].faculty_id
+                for sid in val["slot_ids"]:
+                    rkey = (day_id, sid, room_id)
+                    fkey = (day_id, sid, fac_id)
+                    room_slot_counts[rkey] = room_slot_counts.get(rkey, 0) + 1
+                    fac_slot_counts[fkey] = fac_slot_counts.get(fkey, 0) + 1
+            room_conflicts = sum(1 for count in room_slot_counts.values() if count > 1)
+            faculty_conflicts = sum(1 for count in fac_slot_counts.values() if count > 1)
+            conflict_penalty = (room_conflicts + faculty_conflicts) * 10000
+
+            same_subject_consecutive = 0
+            for key, val in assignments.items():
+                task = val["task"]
+                if task.session_type != "THEORY":
+                    continue
+                day_id = val["day_id"]
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                for other_key, other_val in assignments.items():
+                    if other_key != key:
+                        other_task = other_val["task"]
+                        if other_task.division_id == task.division_id and other_task.subject_id == task.subject_id and other_task.session_type == "THEORY" and other_val["day_id"] == day_id:
+                            other_orders = [slot_order_by_id.get(sid, 0) for sid in other_val["slot_ids"]]
+                            for o in orders:
+                                if (o - 1) in other_orders or (o + 1) in other_orders:
+                                    same_subject_consecutive += 1
+            same_subject_consecutive = same_subject_consecutive // 2
+            same_sub_penalty = same_subject_consecutive * 200
+
+            heavy_consecutive = 0
+            for key, val in assignments.items():
+                task = val["task"]
+                if task.session_type != "THEORY" or not is_heavy_subject(task.subject_id):
+                    continue
+                day_id = val["day_id"]
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                for other_key, other_val in assignments.items():
+                    if other_key != key:
+                        other_task = other_val["task"]
+                        if other_task.division_id == task.division_id and other_task.subject_id != task.subject_id and other_task.session_type == "THEORY" and is_heavy_subject(other_task.subject_id) and other_val["day_id"] == day_id:
+                            other_orders = [slot_order_by_id.get(sid, 0) for sid in other_val["slot_ids"]]
+                            for o in orders:
+                                if (o - 1) in other_orders or (o + 1) in other_orders:
+                                    heavy_consecutive += 1
+            heavy_consecutive = heavy_consecutive // 2
+            heavy_penalty = heavy_consecutive * 150
+
+            batch_day_slots = {}
+            for key, val in assignments.items():
+                task = val["task"]
+                day_id = val["day_id"]
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                batches = [task.batch_id] if task.batch_id else batches_by_division.get(task.division_id, [None])
+                for b_id in batches:
+                    bkey = (task.division_id, b_id, day_id)
+                    batch_day_slots.setdefault(bkey, set()).update(orders)
+
+            break_orders = {slot_order_by_id.get(str(s.get("slot_id")), 0) for s in slot_rows_ordered if s.get("is_break")}
+            total_idle_slots = 0
+            batch_day_gap_count = {}
+            for bkey, orders in batch_day_slots.items():
+                if not orders:
+                    continue
+                s_min = min(orders)
+                s_max = max(orders)
+                idle_count = 0
+                for o in range(s_min, s_max):
+                    if o not in orders and o not in break_orders:
+                        idle_count += 1
+                batch_day_gap_count[bkey] = idle_count
+                total_idle_slots += idle_count
+            idle_penalty = total_idle_slots * 50
+
+            isolated_late_slots = 0
+            max_overall_order = max(slot_order_by_id.values()) if slot_order_by_id else 6
+            for bkey, orders in batch_day_slots.items():
+                for o in orders:
+                    if o >= max_overall_order - 1:
+                        if (o - 1) not in orders:
+                            isolated_late_slots += 1
+            isolated_late_penalty = isolated_late_slots * 100
+
+            sync_imbalance_penalty = 0
+            division_day_batches = {}
+            for (div_id, b_id, day_id), orders in batch_day_slots.items():
+                if b_id is not None:
+                    division_day_batches.setdefault((div_id, day_id), {})[b_id] = orders
+
+            for (div_id, day_id), batches_orders in division_day_batches.items():
+                if len(batches_orders) < 2:
+                    continue
+                starts = []
+                ends = []
+                gaps = []
+                for b_id, orders in batches_orders.items():
+                    if orders:
+                        starts.append(min(orders))
+                        ends.append(max(orders))
+                        gaps.append(batch_day_gap_count.get((div_id, b_id, day_id), 0))
+                if starts:
+                    start_diff = max(starts) - min(starts)
+                    end_diff = max(ends) - min(ends)
+                    gap_diff = max(gaps) - min(gaps)
+                    sync_imbalance_penalty += start_diff * 100 + end_diff * 100 + gap_diff * 50
+
+            tutorial_extreme_counts = {}
+            for key, val in assignments.items():
+                task = val["task"]
+                if task.session_type != "TUTORIAL":
+                    continue
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                batches = [task.batch_id] if task.batch_id else batches_by_division.get(task.division_id, [None])
+                for b_id in batches:
+                    for o in orders:
+                        if o <= 2 or o >= 5:
+                            key_pair = (task.division_id, b_id)
+                            tutorial_extreme_counts[key_pair] = tutorial_extreme_counts.get(key_pair, 0) + 1
+
+            tutorial_fairness_penalty = 0
+            division_tutorials = {}
+            for (div_id, b_id), count in tutorial_extreme_counts.items():
+                if b_id is not None:
+                    division_tutorials.setdefault(div_id, []).append(count)
+            for div_id, counts in division_tutorials.items():
+                if len(counts) >= 2:
+                    tutorial_fairness_penalty += (max(counts) - min(counts)) * 80
+
+            compactness_reward = 0
+            for bkey, orders in batch_day_slots.items():
+                if not orders:
+                    continue
+                idle = batch_day_gap_count.get(bkey, 0)
+                if idle == 0:
+                    compactness_reward += 100
+                if min(orders) <= 2:
+                    compactness_reward += 50
+
+            overall_score = max(min(1000 - (conflict_penalty + same_sub_penalty + heavy_penalty + idle_penalty + isolated_late_penalty + sync_imbalance_penalty + tutorial_fairness_penalty) + compactness_reward, 1000), 0)
+
+            return {
+                "overall_quality_score": overall_score,
+                "conflict_penalty": conflict_penalty,
+                "same_sub_penalty": same_sub_penalty,
+                "heavy_penalty": heavy_penalty,
+                "idle_penalty": idle_penalty,
+                "isolated_late_penalty": isolated_late_penalty,
+                "sync_imbalance_penalty": sync_imbalance_penalty,
+                "tutorial_fairness_penalty": tutorial_fairness_penalty,
+                "compactness_reward": compactness_reward,
+                "room_conflicts": room_conflicts,
+                "faculty_conflicts": faculty_conflicts,
+                "total_idle_slots": total_idle_slots
+            }
+
+        def validate_timetable(assignments: dict) -> tuple[bool, list[str]]:
+            errors = []
+            room_slot_counts = {}
+            fac_slot_counts = {}
+            batch_slot_counts = {}
+            
+            for key, val in assignments.items():
+                day_id = val["day_id"]
+                room_id = val["room_id"]
+                fac_id = val["task"].faculty_id
+                batches = [val["task"].batch_id] if val["task"].batch_id else batches_by_division.get(val["task"].division_id, [None])
+                
+                for sid in val["slot_ids"]:
+                    rkey = (day_id, sid, room_id)
+                    fkey = (day_id, sid, fac_id)
+                    room_slot_counts[rkey] = room_slot_counts.get(rkey, 0) + 1
+                    fac_slot_counts[fkey] = fac_slot_counts.get(fkey, 0) + 1
+                    
+                    for b_id in batches:
+                        bkey = (val["task"].division_id, b_id, day_id, sid)
+                        batch_slot_counts[bkey] = batch_slot_counts.get(bkey, 0) + 1
+            
+            for rkey, count in room_slot_counts.items():
+                if count > 1:
+                    errors.append(f"Room overlap: Room {rkey[2]} on Day {rkey[0]} at Slot {rkey[1]}")
+            for fkey, count in fac_slot_counts.items():
+                if count > 1:
+                    errors.append(f"Faculty overlap: Faculty {fkey[2]} on Day {fkey[0]} at Slot {fkey[1]}")
+            for bkey, count in batch_slot_counts.items():
+                if count > 1:
+                    errors.append(f"Batch overlap: Division {bkey[0]} Batch {bkey[1]} on Day {bkey[2]} at Slot {bkey[3]}")
+                    
+            same_subject_consecutive = 0
+            for key, val in assignments.items():
+                task = val["task"]
+                if task.session_type != "THEORY":
+                    continue
+                day_id = val["day_id"]
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                for other_key, other_val in assignments.items():
+                    if other_key != key:
+                        other_task = other_val["task"]
+                        if other_task.division_id == task.division_id and other_task.subject_id == task.subject_id and other_task.session_type == "THEORY" and other_val["day_id"] == day_id:
+                            other_orders = [slot_order_by_id.get(sid, 0) for sid in other_val["slot_ids"]]
+                            for o in orders:
+                                if (o - 1) in other_orders or (o + 1) in other_orders:
+                                    same_subject_consecutive += 1
+            if same_subject_consecutive > 0:
+                errors.append(f"Consecutive same-subject theory sessions: {same_subject_consecutive // 2} overlaps")
+                
+            subject_daily_counts = {}
+            for key, val in assignments.items():
+                task = val["task"]
+                if task.session_type != "THEORY":
+                    continue
+                day_id = val["day_id"]
+                skey = (task.division_id, task.subject_id, day_id)
+                subject_daily_counts[skey] = subject_daily_counts.get(skey, 0) + 1
+            for skey, count in subject_daily_counts.items():
+                if count > 2:
+                    errors.append(f"Subject spread imbalance: Division {skey[0]} has {count} theory sessions of subject {skey[1]} on Day {skey[2]}")
+                    
+            tutorial_extreme_counts = {}
+            for key, val in assignments.items():
+                task = val["task"]
+                if task.session_type != "TUTORIAL":
+                    continue
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                batches = [task.batch_id] if task.batch_id else batches_by_division.get(task.division_id, [None])
+                for b_id in batches:
+                    for o in orders:
+                        if o <= 2 or o >= 5:
+                            key_pair = (task.division_id, b_id)
+                            tutorial_extreme_counts[key_pair] = tutorial_extreme_counts.get(key_pair, 0) + 1
+            division_tutorials = {}
+            for (div_id, b_id), count in tutorial_extreme_counts.items():
+                if b_id is not None:
+                    division_tutorials.setdefault(div_id, []).append(count)
+            for div_id, counts in division_tutorials.items():
+                if len(counts) >= 2:
+                    imbalance = max(counts) - min(counts)
+                    if imbalance > 3:
+                        errors.append(f"Tutorial fairness violation in Division {div_id}: extreme slot imbalance is {imbalance} (> 3)")
+                        
+            batch_day_slots = {}
+            for key, val in assignments.items():
+                task = val["task"]
+                day_id = val["day_id"]
+                orders = [slot_order_by_id.get(sid, 0) for sid in val["slot_ids"]]
+                batches = [task.batch_id] if task.batch_id else batches_by_division.get(task.division_id, [None])
+                for b_id in batches:
+                    bkey = (task.division_id, b_id, day_id)
+                    batch_day_slots.setdefault(bkey, set()).update(orders)
+            
+            break_orders = {slot_order_by_id.get(str(s.get("slot_id")), 0) for s in slot_rows_ordered if s.get("is_break")}
+            
+            for bkey, orders in batch_day_slots.items():
+                if not orders:
+                    continue
+                s_min = min(orders)
+                s_max = max(orders)
+                idle_count = 0
+                for o in range(s_min, s_max):
+                    if o not in orders and o not in break_orders:
+                        idle_count += 1
+                if idle_count > 2:
+                    errors.append(f"Acceptable compactness violation: Division {bkey[0]} Batch {bkey[1]} on Day {bkey[2]} has {idle_count} idle gap slots (> 2)")
+                    
+            return len(errors) == 0, errors
+
         def year_rank(value: str) -> int:
 
             # Prioritize SY to improve under-allocation in second-year divisions.
@@ -1936,2230 +2273,2334 @@ class TimetableOrchestrationEngine:
 
 
 
-        for task in tasks_ordered:
-
-            scheduled = False
-
-            room_candidates = (lab_rooms + theory_rooms) if task.session_type == "LAB" else theory_rooms
-
-            preferred_shift_name, preferred_shift_window = division_shift_assignments.get(
-
-                task.division_id,
-
-                ("SHIFT_08_14", (8 * 60, 14 * 60)),
-
-            )
-
-            preferred_lunch_slot_order = lunch_slot_order_for_task(task, preferred_shift_name)
-            lab_group_id = (
-
-                task.group_id
-
-                if task.session_type == "LAB"
-
-                and task.batch_id
-
-                and task.group_id
-
-                and task.group_id in strict_parallel_lab_groups
-
-                else None
-
-            )
-
-
-
-            task_duration = max(task.duration_slots, 1)
-
-            group_size = 1
-
-            for current_hour_limit in (division_daily_hard_limit,):
-
-                for day in sorted(
-
-                    day_rows,
-
-                    key=lambda row: (theory_subject_day_count(task, int(row.get("day_id") or 0)), seeded_rank(
-                        task.division_id,
-
-                        task.subject_id,
-
-                        task.faculty_id,
-
-                        task.batch_id or "",
-                        task.group_id or "",
-                        row.get("day_id"),
-
-                    )),
-                ):
-
-                    day_id = int(day["day_id"])
-
-                    candidate_start_indices = sorted(
-
-                        range(len(slot_rows_ordered)),
-
-                        key=lambda start_index: candidate_start_priority(
-
-                            slot_rows_ordered[start_index : start_index + task_duration],
-
-                            preferred_shift_window,
-
-                        )
-                        + (
-                            theory_subject_adjacency_count(
-                                task,
-                                day_id,
-                                [str(item["slot_id"]) for item in slot_rows_ordered[start_index : start_index + task_duration]],
-                            ),
-                            seeded_rank(task.division_id, task.subject_id, day_id, start_index, task.batch_id or ""),
-                        ),
-                    )
-
-
-
-                    for start_index in candidate_start_indices:
-
-                        candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
-
-                        if len(candidate_slots) != task_duration:
-
-                            continue
-
-
-
-                        # Hard window check: every scheduled session must stay inside the
-
-                        # assigned six-hour shift block for the division.
-
-                        if task.session_type != "TUTORIAL" and not _block_within_window(candidate_slots, preferred_shift_window):
-
-                            candidate_rejections += 1
-
-                            continue
-
-
-
-                        # Multi-hour sessions require contiguous slots.
-
-                        if any(
-
-                            int(candidate_slots[i + 1].get("slot_order") or 0) - int(candidate_slots[i].get("slot_order") or 0) != 1
-
-                            for i in range(len(candidate_slots) - 1)
-
-                        ):
-
-                            continue
-
-
-
-                        slot_ids = [str(item["slot_id"]) for item in candidate_slots]
-                        if uses_lunch_slot(task, preferred_shift_name, slot_ids):
-                            candidate_rejections += 1
-                            continue
-
-                        full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
-                        batch_div_keys = [
-
-                            (task.division_id, str(task.batch_id), day_id, slot_id)
-
-                            for slot_id in slot_ids
-
-                        ]
-
-                        fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
-
-                        day_key = (task.division_id, day_id)
-
-                        occupied = division_day_slots.setdefault(day_key, set())
-
-                        occupied_orders = division_day_slot_orders.setdefault(day_key, set())
-
-
-
-                        if task.batch_id:
-
-                            # Batch-scoped sessions can overlap with other batches, but not with
-
-                            # full-division sessions or the same batch at the same slot.
-
-                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
-
-                                candidate_rejections += 1
-
-                                continue
-
-                            if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
-
-                                candidate_rejections += 1
-
-                                continue
-
-
-
-                            # Encourage practical lab rotation: avoid assigning the same lab subject
-
-                            # to multiple batches of the same division at the same time.
-
-                            if task.session_type == "LAB" and not lab_group_id:
-
-                                duplicate_lab_subject = False
-
-                                for slot_id in slot_ids:
-
-                                    key = (task.division_id, day_id, slot_id)
-
-                                    subject_set = division_slot_lab_subjects.get(key, set())
-
-                                    if task.subject_id in subject_set:
-
-                                        duplicate_lab_subject = True
-
-                                        break
-
-                                if duplicate_lab_subject:
-
-                                    candidate_rejections += 1
-
-                                    continue
-
-
-
-                            required_parallel = required_parallel_labs_by_division.get(task.division_id)
-
-                            if task.session_type == "LAB" and required_parallel:
-
-                                invalid_parallel_window = False
-
-                                opening_new_parallel_window = True
-
-                                for slot_id in slot_ids:
-
-                                    parallel_key = (task.division_id, day_id, slot_id)
-
-                                    current_entries = division_slot_parallel_labs.get(parallel_key, [])
-
-                                    current_batches = {entry[0] for entry in current_entries}
-
-                                    current_subjects = {entry[1] for entry in current_entries}
-
-                                    if str(task.batch_id) in current_batches:
-
-                                        invalid_parallel_window = True
-
-                                        break
-
-                                    # Same-subject labs across different batches are valid and expected
-
-                                    # for strict parallel batch-lab packing.
-
-                                    if len(current_entries) >= required_parallel:
-
-                                        invalid_parallel_window = True
-
-                                        break
-
-                                    if current_entries:
-
-                                        opening_new_parallel_window = False
-
-
-
-                                if invalid_parallel_window:
-
-                                    candidate_rejections += 1
-
-                                    continue
-
-
-
-                                incomplete_window_exists = any(
-
-                                    key[0] == task.division_id
-
-                                    and key[1] == day_id
-
-                                    and 0 < len(entries) < required_parallel
-
-                                    for key, entries in division_slot_parallel_labs.items()
-
-                                )
-
-                                if incomplete_window_exists and opening_new_parallel_window:
-
-                                    candidate_rejections += 1
-
-                                    continue
-
-                        else:
-
-                            # Full-division sessions cannot overlap with any existing full-division
-
-                            # session or any batch session in that slot.
-
-                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
-
-                                candidate_rejections += 1
-
-                                continue
-
-                            if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
-
-                                candidate_rejections += 1
-
-                                continue
-
-
-
-                        new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
-
-                        if task.session_type != "TUTORIAL" and len(occupied) + new_slot_count > max_sessions_per_day:
-
-                            candidate_rejections += 1
-
-                            continue
-
-
-
-                        candidate_orders = {slot_order_by_id.get(slot_id, 0) for slot_id in slot_ids}
-
-                        proposed_orders = occupied_slot_orders_for_task_day(task, day_id)
-                        proposed_orders.update(candidate_orders)
-
-                        if task.session_type != "TUTORIAL" and not _is_gapless_day_pattern(proposed_orders, preferred_lunch_slot_order):
-
-                            candidate_rejections += 1
-
-                            continue
-
-
-
-                        if any(fac_key in used_faculty_slot for fac_key in fac_keys):
-
-                            candidate_rejections += 1
-
-                            continue
-
-
-
-                        # Prefer 8-hour day load, then fallback to 9/10 only when needed.
-
-                        session_is_theory_or_lab = task.session_type in ("THEORY", "LAB")
-
-                        if session_is_theory_or_lab:
-
-                            div_day_key = (task.division_id, day_id)
-
-                            current_div_hours = division_day_theory_lab_hours.get(div_day_key, 0)
-
-                            if current_div_hours + task_duration > current_hour_limit:
-
-                                candidate_rejections += 1
-
-                                continue
-
-
-
-                            fac_day_key = (task.faculty_id, day_id)
-
-                            current_fac_hours = faculty_day_theory_lab_hours.get(fac_day_key, 0)
-
-                            if current_fac_hours + task_duration > faculty_daily_hard_limit:
-
-                                candidate_rejections += 1
-
-                                continue
-
-
-
-                        if lab_group_id:
-                            bound_slot = lab_group_slot_binding.get(lab_group_id)
-
-                            if bound_slot:
-
-                                bound_day_id, bound_slot_ids = bound_slot
-
-                                if day_id != bound_day_id or tuple(slot_ids) != bound_slot_ids:
-
-                                    candidate_rejections += 1
-
-                                    continue
-
-                            else:
-
-                                required_rooms = lab_group_expected_counts.get(lab_group_id, 1)
-
-                                precheck_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, required_rooms)
-
-                                if len(precheck_room_ids) < required_rooms:
-
-                                    candidate_rejections += 1
-
-                                    continue
-
-
-
-                        selected_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, group_size)
-
-                        if len(selected_room_ids) < group_size:
-
-                            candidate_rejections += 1
-
-                            continue
-
-
-
-                        selected_room_id = selected_room_ids[0]
-
-                        for slot_id in slot_ids:
-
-                            allocated_entries.append(
-
-                                {
-
-                                    "division_id": task.division_id,
-
-                                    "faculty_id": task.faculty_id,
-
-                                    "subject_id": task.subject_id,
-
-                                    "room_id": selected_room_id,
-
-                                    "day_id": day_id,
-
-                                    "slot_id": slot_id,
-
-                                    "batch_id": task.batch_id,
-
-                                    "session_type": task.session_type,
-
-                                }
-
+        best_assignment_snapshot = None
+        best_validity = 1  # 1 is invalid, 0 is valid
+        best_unresolved = 99999
+        best_score = -1
+        best_quality_opt = {}
+        best_candidate_rejections = 0
+        best_repaired_from_deadlocks = 0
+        best_repack_moves = 0
+        best_unresolved_task_samples = []
+        best_validation_errors = []
+
+        # We will run 3 candidate attempts
+        for attempt in range(3):
+            attempt_idx = attempt
+            clear_all_state()
+            candidate_rejections = 0
+            repaired_from_deadlocks = 0
+            repack_moves = 0
+
+            for task in tasks_ordered:
+    
+                scheduled = False
+    
+                room_candidates = (lab_rooms + theory_rooms) if task.session_type == "LAB" else theory_rooms
+    
+                preferred_shift_name, preferred_shift_window = division_shift_assignments.get(
+    
+                    task.division_id,
+    
+                    ("SHIFT_08_14", (8 * 60, 14 * 60)),
+    
+                )
+    
+                preferred_lunch_slot_order = lunch_slot_order_for_task(task, preferred_shift_name)
+                lab_group_id = (
+    
+                    task.group_id
+    
+                    if task.session_type == "LAB"
+    
+                    and task.batch_id
+    
+                    and task.group_id
+    
+                    and task.group_id in strict_parallel_lab_groups
+    
+                    else None
+    
+                )
+    
+    
+    
+                task_duration = max(task.duration_slots, 1)
+    
+                group_size = 1
+    
+                for current_hour_limit in (division_daily_hard_limit,):
+    
+                    for day in sorted(
+    
+                        day_rows,
+    
+                        key=lambda row: (theory_subject_day_count(task, int(row.get("day_id") or 0)), seeded_rank(
+                            task.division_id,
+    
+                            task.subject_id,
+    
+                            task.faculty_id,
+    
+                            task.batch_id or "",
+                            task.group_id or "",
+                            row.get("day_id"),
+    
+                        )),
+                    ):
+    
+                        day_id = int(day["day_id"])
+    
+                        candidate_start_indices = sorted(
+    
+                            range(len(slot_rows_ordered)),
+    
+                            key=lambda start_index: candidate_start_priority(
+    
+                                slot_rows_ordered[start_index : start_index + task_duration],
+    
+                                preferred_shift_window,
+    
                             )
-
-                            used_room_slot.add((selected_room_id, day_id, slot_id))
-
-                            if task.batch_id:
-
-                                used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
-
-                                used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
-
-                                if task.session_type == "LAB":
-
-                                    key = (task.division_id, day_id, slot_id)
-
-                                    division_slot_lab_subjects.setdefault(key, set()).add(task.subject_id)
-
-                                    parallel_key = (task.division_id, day_id, slot_id)
-
-                                    division_slot_parallel_labs.setdefault(parallel_key, []).append((str(task.batch_id), task.subject_id))
-
-                            else:
-
-                                used_division_full_slot.add((task.division_id, day_id, slot_id))
-
-                            used_faculty_slot.add((task.faculty_id, day_id, slot_id))
-
-                            if task.session_type != "TUTORIAL":
-
-                                occupied.add(slot_id)
-
-                                occupied_orders.add(slot_order_by_id.get(slot_id, 0))
-                        record_task_slot_orders(task, day_id, slot_ids)
-                        record_theory_subject_slots(task, day_id, slot_ids)
-                        if lab_group_id:
-                            lab_group_slot_binding.setdefault(lab_group_id, (day_id, tuple(slot_ids)))
-                        room_usage_counter[selected_room_id] = room_usage_counter.get(selected_room_id, 0) + task_duration
-
-                        faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + task_duration
-
-
-
-                        if task.session_type in ("THEORY", "LAB"):
-
-                            div_day_key = (task.division_id, day_id)
-
-                            division_day_theory_lab_hours[div_day_key] = division_day_theory_lab_hours.get(div_day_key, 0) + task_duration
-
-
-
-                            fac_day_key = (task.faculty_id, day_id)
-
-                            faculty_day_theory_lab_hours[fac_day_key] = faculty_day_theory_lab_hours.get(fac_day_key, 0) + task_duration
-
-                            hour_limit_usage[current_hour_limit] += 1
-
-
-
-                        scheduled_task_assignments[task_key(task)] = {
-
-                            "task": task,
-
-                            "day_id": day_id,
-
-                            "slot_ids": list(slot_ids),
-
-                            "room_id": selected_room_id,
-
-                        }
-
-
-
-                        scheduled = True
-
-                        break
-
-
-
-                    if scheduled:
-
-                        break
-
-
-
-                if scheduled:
-
-                    break
-
-
-
-            if not scheduled:
-
-                # Last-resort fallback: relax only gapless-day pattern for this task
-
-                # while preserving room/faculty/division conflict checks and 10-hour hard cap.
-
-                room_candidates = lab_rooms if task.session_type == "LAB" else theory_rooms
-
-                for day in sorted(
-
-                    day_rows,
-
-                    key=lambda row: (theory_subject_day_count(task, int(row.get("day_id") or 0)), seeded_rank(
-                        task.division_id,
-
-                        task.subject_id,
-
-                        task.faculty_id,
-
-                        task.batch_id or "",
-                        task.group_id or "",
-                        "fallback",
-                        row.get("day_id"),
-
-                    )),
-                ):
-
-                    day_id = int(day["day_id"])
-
-                    candidate_start_indices = sorted(
-
-                        range(len(slot_rows_ordered)),
-
-                        key=lambda start_index: candidate_start_priority(
-
-                            slot_rows_ordered[start_index : start_index + task_duration],
-
-                            preferred_shift_window,
-
-                        )
-                        + (
-                            theory_subject_adjacency_count(
-                                task,
-                                day_id,
-                                [str(item["slot_id"]) for item in slot_rows_ordered[start_index : start_index + task_duration]],
+                            + (
+                                theory_subject_adjacency_count(
+                                    task,
+                                    day_id,
+                                    [str(item["slot_id"]) for item in slot_rows_ordered[start_index : start_index + task_duration]],
+                                ),
+                                seeded_rank(task.division_id, task.subject_id, day_id, start_index, task.batch_id or ""),
                             ),
-                            seeded_rank(task.division_id, task.subject_id, day_id, "fallback", start_index, task.batch_id or ""),
-                        ),
-                    )
-
-
-
-                    for start_index in candidate_start_indices:
-
-                        candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
-
-                        if len(candidate_slots) != task_duration:
-
-                            continue
-
-
-
-                        if task.session_type != "TUTORIAL" and not _block_within_window(candidate_slots, preferred_shift_window):
-
-                            continue
-
-
-
-                        if any(
-
-                            int(candidate_slots[i + 1].get("slot_order") or 0) - int(candidate_slots[i].get("slot_order") or 0) != 1
-
-                            for i in range(len(candidate_slots) - 1)
-
-                        ):
-
-                            continue
-
-
-
-                        slot_ids = [str(item["slot_id"]) for item in candidate_slots]
-                        if uses_lunch_slot(task, preferred_shift_name, slot_ids):
-                            continue
-
-                        full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
-                        batch_div_keys = [
-
-                            (task.division_id, str(task.batch_id), day_id, slot_id)
-
-                            for slot_id in slot_ids
-
-                        ]
-
-                        fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
-
-                        day_key = (task.division_id, day_id)
-
-                        occupied = division_day_slots.setdefault(day_key, set())
-
-                        occupied_orders = division_day_slot_orders.setdefault(day_key, set())
-
-
-
-                        if task.batch_id:
-
-                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
-
+                        )
+    
+    
+    
+                        for start_index in candidate_start_indices:
+    
+                            candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
+    
+                            if len(candidate_slots) != task_duration:
+    
                                 continue
-
-                            if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
-
+    
+    
+    
+                            # Hard window check: every scheduled session must stay inside the
+    
+                            # assigned six-hour shift block for the division.
+    
+                            if task.session_type != "TUTORIAL" and not _block_within_window(candidate_slots, preferred_shift_window):
+    
+                                candidate_rejections += 1
+    
                                 continue
-
-
-
-                            required_parallel = required_parallel_labs_by_division.get(task.division_id)
-
-                            if task.session_type == "LAB" and required_parallel:
-
-                                invalid_parallel_window = False
-
-                                opening_new_parallel_window = True
-
-                                for slot_id in slot_ids:
-
-                                    parallel_key = (task.division_id, day_id, slot_id)
-
-                                    current_entries = division_slot_parallel_labs.get(parallel_key, [])
-
-                                    current_batches = {entry[0] for entry in current_entries}
-
-                                    current_subjects = {entry[1] for entry in current_entries}
-
-                                    if str(task.batch_id) in current_batches:
-
-                                        invalid_parallel_window = True
-
-                                        break
-
-                                    # Same-subject labs across different batches are valid and expected
-
-                                    # for strict parallel batch-lab packing.
-
-                                    if len(current_entries) >= required_parallel:
-
-                                        invalid_parallel_window = True
-
-                                        break
-
-                                    if current_entries:
-
-                                        opening_new_parallel_window = False
-
-                                if invalid_parallel_window:
-
+    
+    
+    
+                            # Multi-hour sessions require contiguous slots.
+    
+                            if any(
+    
+                                int(candidate_slots[i + 1].get("slot_order") or 0) - int(candidate_slots[i].get("slot_order") or 0) != 1
+    
+                                for i in range(len(candidate_slots) - 1)
+    
+                            ):
+    
+                                continue
+    
+    
+    
+                            slot_ids = [str(item["slot_id"]) for item in candidate_slots]
+                            if uses_lunch_slot(task, preferred_shift_name, slot_ids):
+                                candidate_rejections += 1
+                                continue
+    
+                            # CONSTRAINT: Prevent consecutive same-subject theory
+                            if task.session_type == "THEORY" and theory_subject_adjacency_count(task, day_id, slot_ids) > 0:
+                                candidate_rejections += 1
+                                continue
+    
+                            # CONSTRAINT: Avoid consecutive cognitively heavy subjects
+                            if task.session_type == "THEORY" and is_heavy_subject(task.subject_id):
+                                if is_adjacent_to_heavy_subject(task, day_id, slot_ids):
+                                    candidate_rejections += 1
                                     continue
-
-
-
-                                incomplete_window_exists = any(
-
-                                    key[0] == task.division_id
-
-                                    and key[1] == day_id
-
-                                    and 0 < len(entries) < required_parallel
-
-                                    for key, entries in division_slot_parallel_labs.items()
-
-                                )
-
-                                if incomplete_window_exists and opening_new_parallel_window:
-
-                                    continue
-
-                        else:
-
-                            if any(div_key in used_division_full_slot for div_key in full_div_keys):
-
-                                continue
-
-                            if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
-
-                                continue
-
-
-
-                        new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
-
-                        if task.session_type != "TUTORIAL" and len(occupied) + new_slot_count > max_sessions_per_day:
-
-                            continue
-
-
-
-                        if any(fac_key in used_faculty_slot for fac_key in fac_keys):
-
-                            continue
-
-
-
-                        if task.session_type in ("THEORY", "LAB"):
-
-                            hard_limit = current_hour_limit
-
-                            div_day_key = (task.division_id, day_id)
-
-                            current_div_hours = division_day_theory_lab_hours.get(div_day_key, 0)
-
-                            if current_div_hours + task_duration > hard_limit:
-
-                                continue
-
-
-
-                            fac_day_key = (task.faculty_id, day_id)
-
-                            current_fac_hours = faculty_day_theory_lab_hours.get(fac_day_key, 0)
-
-                            if current_fac_hours + task_duration > faculty_daily_hard_limit:
-
-                                continue
-
-
-
-                        if lab_group_id:
-
-                            bound_slot = lab_group_slot_binding.get(lab_group_id)
-
-                            if bound_slot:
-
-                                bound_day_id, bound_slot_ids = bound_slot
-
-                                if day_id != bound_day_id or tuple(slot_ids) != bound_slot_ids:
-
-                                    continue
-
-                            else:
-
-                                required_rooms = lab_group_expected_counts.get(lab_group_id, 1)
-
-                                precheck_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, required_rooms)
-
-                                if len(precheck_room_ids) < required_rooms:
-
-                                    continue
-
-
-
-                        selected_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, group_size)
-
-                        if len(selected_room_ids) < group_size:
-
-                            continue
-
-
-
-                        selected_room_id = selected_room_ids[0]
-
-                        for slot_id in slot_ids:
-
-                            allocated_entries.append(
-
-                                {
-
-                                    "division_id": task.division_id,
-
-                                    "faculty_id": task.faculty_id,
-
-                                    "subject_id": task.subject_id,
-
-                                    "room_id": selected_room_id,
-
-                                    "day_id": day_id,
-
-                                    "slot_id": slot_id,
-
-                                    "batch_id": task.batch_id,
-
-                                    "session_type": task.session_type,
-
-                                }
-
-                            )
-
-                            used_room_slot.add((selected_room_id, day_id, slot_id))
-
+    
+                            full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
+                            batch_div_keys = [
+    
+                                (task.division_id, str(task.batch_id), day_id, slot_id)
+    
+                                for slot_id in slot_ids
+    
+                            ]
+    
+                            fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
+    
+                            day_key = (task.division_id, day_id)
+    
+                            occupied = division_day_slots.setdefault(day_key, set())
+    
+                            occupied_orders = division_day_slot_orders.setdefault(day_key, set())
+    
+    
+    
                             if task.batch_id:
-
-                                used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
-
-                                used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
-
-                                if task.session_type == "LAB":
-
-                                    key = (task.division_id, day_id, slot_id)
-
-                                    division_slot_lab_subjects.setdefault(key, set()).add(task.subject_id)
-
-                                    parallel_key = (task.division_id, day_id, slot_id)
-
-                                    division_slot_parallel_labs.setdefault(parallel_key, []).append((str(task.batch_id), task.subject_id))
-
+    
+                                # Batch-scoped sessions can overlap with other batches, but not with
+    
+                                # full-division sessions or the same batch at the same slot.
+    
+                                if any(div_key in used_division_full_slot for div_key in full_div_keys):
+    
+                                    candidate_rejections += 1
+    
+                                    continue
+    
+                                if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
+    
+                                    candidate_rejections += 1
+    
+                                    continue
+    
+    
+    
+                                # Encourage practical lab rotation: avoid assigning the same lab subject
+    
+                                # to multiple batches of the same division at the same time.
+    
+                                if task.session_type == "LAB" and not lab_group_id:
+    
+                                    duplicate_lab_subject = False
+    
+                                    for slot_id in slot_ids:
+    
+                                        key = (task.division_id, day_id, slot_id)
+    
+                                        subject_set = division_slot_lab_subjects.get(key, set())
+    
+                                        if task.subject_id in subject_set:
+    
+                                            duplicate_lab_subject = True
+    
+                                            break
+    
+                                    if duplicate_lab_subject:
+    
+                                        candidate_rejections += 1
+    
+                                        continue
+    
+    
+    
+                                required_parallel = required_parallel_labs_by_division.get(task.division_id)
+    
+                                if task.session_type == "LAB" and required_parallel:
+    
+                                    invalid_parallel_window = False
+    
+                                    opening_new_parallel_window = True
+    
+                                    for slot_id in slot_ids:
+    
+                                        parallel_key = (task.division_id, day_id, slot_id)
+    
+                                        current_entries = division_slot_parallel_labs.get(parallel_key, [])
+    
+                                        current_batches = {entry[0] for entry in current_entries}
+    
+                                        current_subjects = {entry[1] for entry in current_entries}
+    
+                                        if str(task.batch_id) in current_batches:
+    
+                                            invalid_parallel_window = True
+    
+                                            break
+    
+                                        # Same-subject labs across different batches are valid and expected
+    
+                                        # for strict parallel batch-lab packing.
+    
+                                        if len(current_entries) >= required_parallel:
+    
+                                            invalid_parallel_window = True
+    
+                                            break
+    
+                                        if current_entries:
+    
+                                            opening_new_parallel_window = False
+    
+    
+    
+                                    if invalid_parallel_window:
+    
+                                        candidate_rejections += 1
+    
+                                        continue
+    
+    
+    
+                                    incomplete_window_exists = any(
+    
+                                        key[0] == task.division_id
+    
+                                        and key[1] == day_id
+    
+                                        and 0 < len(entries) < required_parallel
+    
+                                        for key, entries in division_slot_parallel_labs.items()
+    
+                                    )
+    
+                                    if incomplete_window_exists and opening_new_parallel_window:
+    
+                                        candidate_rejections += 1
+    
+                                        continue
+    
                             else:
-
-                                used_division_full_slot.add((task.division_id, day_id, slot_id))
-
-                            used_faculty_slot.add((task.faculty_id, day_id, slot_id))
-
-                            if task.session_type != "TUTORIAL":
-
-                                occupied.add(slot_id)
-
-                                occupied_orders.add(slot_order_by_id.get(slot_id, 0))
-
-                        record_task_slot_orders(task, day_id, slot_ids)
-                        record_theory_subject_slots(task, day_id, slot_ids)
-                        if lab_group_id:
-                            lab_group_slot_binding.setdefault(lab_group_id, (day_id, tuple(slot_ids)))
-
-                        room_usage_counter[selected_room_id] = room_usage_counter.get(selected_room_id, 0) + task_duration
-                        faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + task_duration
-
-
-
-                        if task.session_type in ("THEORY", "LAB"):
-
-                            div_day_key = (task.division_id, day_id)
-
-                            division_day_theory_lab_hours[div_day_key] = division_day_theory_lab_hours.get(div_day_key, 0) + task_duration
-
-                            fac_day_key = (task.faculty_id, day_id)
-
-                            faculty_day_theory_lab_hours[fac_day_key] = faculty_day_theory_lab_hours.get(fac_day_key, 0) + task_duration
-
-                            hour_limit_usage[hard_limit] = hour_limit_usage.get(hard_limit, 0) + 1
-
-
-
-                        scheduled_task_assignments[task_key(task)] = {
-
-                            "task": task,
-
-                            "day_id": day_id,
-
-                            "slot_ids": list(slot_ids),
-
-                            "room_id": selected_room_id,
-
-                        }
-
-
-
-                        scheduled = True
-
-                        break
-
-
-
+    
+                                # Full-division sessions cannot overlap with any existing full-division
+    
+                                # session or any batch session in that slot.
+    
+                                if any(div_key in used_division_full_slot for div_key in full_div_keys):
+    
+                                    candidate_rejections += 1
+    
+                                    continue
+    
+                                if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
+    
+                                    candidate_rejections += 1
+    
+                                    continue
+    
+    
+    
+                            new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
+    
+                            if task.session_type != "TUTORIAL" and len(occupied) + new_slot_count > max_sessions_per_day:
+    
+                                candidate_rejections += 1
+    
+                                continue
+    
+    
+    
+                            candidate_orders = {slot_order_by_id.get(slot_id, 0) for slot_id in slot_ids}
+    
+                            proposed_orders = occupied_slot_orders_for_task_day(task, day_id)
+                            proposed_orders.update(candidate_orders)
+    
+                            if task.session_type != "TUTORIAL" and not _is_gapless_day_pattern(proposed_orders, preferred_lunch_slot_order):
+    
+                                candidate_rejections += 1
+    
+                                continue
+    
+    
+    
+                            if any(fac_key in used_faculty_slot for fac_key in fac_keys):
+    
+                                candidate_rejections += 1
+    
+                                continue
+    
+    
+    
+                            # Prefer 8-hour day load, then fallback to 9/10 only when needed.
+    
+                            session_is_theory_or_lab = task.session_type in ("THEORY", "LAB")
+    
+                            if session_is_theory_or_lab:
+    
+                                div_day_key = (task.division_id, day_id)
+    
+                                current_div_hours = division_day_theory_lab_hours.get(div_day_key, 0)
+    
+                                if current_div_hours + task_duration > current_hour_limit:
+    
+                                    candidate_rejections += 1
+    
+                                    continue
+    
+    
+    
+                                fac_day_key = (task.faculty_id, day_id)
+    
+                                current_fac_hours = faculty_day_theory_lab_hours.get(fac_day_key, 0)
+    
+                                if current_fac_hours + task_duration > faculty_daily_hard_limit:
+    
+                                    candidate_rejections += 1
+    
+                                    continue
+    
+    
+    
+                            if lab_group_id:
+                                bound_slot = lab_group_slot_binding.get(lab_group_id)
+    
+                                if bound_slot:
+    
+                                    bound_day_id, bound_slot_ids = bound_slot
+    
+                                    if day_id != bound_day_id or tuple(slot_ids) != bound_slot_ids:
+    
+                                        candidate_rejections += 1
+    
+                                        continue
+    
+                                else:
+    
+                                    required_rooms = lab_group_expected_counts.get(lab_group_id, 1)
+    
+                                    precheck_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, required_rooms)
+    
+                                    if len(precheck_room_ids) < required_rooms:
+    
+                                        candidate_rejections += 1
+    
+                                        continue
+    
+    
+    
+                            selected_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, group_size)
+    
+                            if len(selected_room_ids) < group_size:
+    
+                                candidate_rejections += 1
+    
+                                continue
+    
+    
+    
+                            selected_room_id = selected_room_ids[0]
+    
+                            for slot_id in slot_ids:
+    
+                                allocated_entries.append(
+    
+                                    {
+    
+                                        "division_id": task.division_id,
+    
+                                        "faculty_id": task.faculty_id,
+    
+                                        "subject_id": task.subject_id,
+    
+                                        "room_id": selected_room_id,
+    
+                                        "day_id": day_id,
+    
+                                        "slot_id": slot_id,
+    
+                                        "batch_id": task.batch_id,
+    
+                                        "session_type": task.session_type,
+    
+                                    }
+    
+                                )
+    
+                                used_room_slot.add((selected_room_id, day_id, slot_id))
+    
+                                if task.batch_id:
+    
+                                    used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
+    
+                                    used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
+    
+                                    if task.session_type == "LAB":
+    
+                                        key = (task.division_id, day_id, slot_id)
+    
+                                        division_slot_lab_subjects.setdefault(key, set()).add(task.subject_id)
+    
+                                        parallel_key = (task.division_id, day_id, slot_id)
+    
+                                        division_slot_parallel_labs.setdefault(parallel_key, []).append((str(task.batch_id), task.subject_id))
+    
+                                else:
+    
+                                    used_division_full_slot.add((task.division_id, day_id, slot_id))
+    
+                                used_faculty_slot.add((task.faculty_id, day_id, slot_id))
+    
+                                if task.session_type != "TUTORIAL":
+    
+                                    occupied.add(slot_id)
+    
+                                    occupied_orders.add(slot_order_by_id.get(slot_id, 0))
+                            record_task_slot_orders(task, day_id, slot_ids)
+                            record_theory_subject_slots(task, day_id, slot_ids)
+                            if lab_group_id:
+                                lab_group_slot_binding.setdefault(lab_group_id, (day_id, tuple(slot_ids)))
+                            room_usage_counter[selected_room_id] = room_usage_counter.get(selected_room_id, 0) + task_duration
+    
+                            faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + task_duration
+    
+    
+    
+                            if task.session_type in ("THEORY", "LAB"):
+    
+                                div_day_key = (task.division_id, day_id)
+    
+                                division_day_theory_lab_hours[div_day_key] = division_day_theory_lab_hours.get(div_day_key, 0) + task_duration
+    
+    
+    
+                                fac_day_key = (task.faculty_id, day_id)
+    
+                                faculty_day_theory_lab_hours[fac_day_key] = faculty_day_theory_lab_hours.get(fac_day_key, 0) + task_duration
+    
+                                hour_limit_usage[current_hour_limit] += 1
+    
+    
+    
+                            scheduled_task_assignments[task_key(task)] = {
+    
+                                "task": task,
+    
+                                "day_id": day_id,
+    
+                                "slot_ids": list(slot_ids),
+    
+                                "room_id": selected_room_id,
+    
+                            }
+    
+    
+    
+                            scheduled = True
+    
+                            break
+    
+    
+    
+                        if scheduled:
+    
+                            break
+    
+    
+    
                     if scheduled:
-
+    
                         break
-
-
-
-            if not scheduled:
-
-                unresolved_task_pool.append(task)
-
-                unresolved_tasks += 1
-
-                if len(unresolved_task_samples) < 20:
-
-                    unresolved_task_samples.append(
-
-                        {
-
-                            "division_id": task.division_id,
-
-                            "faculty_id": task.faculty_id,
-
-                            "subject_id": task.subject_id,
-
-                            "batch_id": task.batch_id,
-
-                            "session_type": task.session_type,
-
-                            "reason": "no_feasible_slot",
-
-                        }
-
-                    )
-
-
-
-        slot_row_by_id = {str(slot.get("slot_id")): slot for slot in slot_rows_ordered}
-
-
-
-        def _remove_assignment(assignment: dict[str, Any]) -> None:
-
-            task: _SessionTask = assignment["task"]
-
-            day_id = int(assignment["day_id"])
-
-            slot_ids = [str(slot_id) for slot_id in assignment["slot_ids"]]
-
-            room_id = str(assignment["room_id"])
-
-            key = task_key(task)
-
-
-
-            for slot_id in slot_ids:
-
-                used_room_slot.discard((room_id, day_id, slot_id))
-
-                used_faculty_slot.discard((task.faculty_id, day_id, slot_id))
-
-                if task.batch_id:
-
-                    used_division_batch_slot.discard((task.division_id, str(task.batch_id), day_id, slot_id))
-
-                    used_division_any_batch_slot.discard((task.division_id, day_id, slot_id))
-
-                    if task.session_type == "LAB":
-
-                        subject_key = (task.division_id, day_id, slot_id)
-
-                        subject_set = division_slot_lab_subjects.get(subject_key)
-
-                        if subject_set:
-
-                            subject_set.discard(task.subject_id)
-
-                            if not subject_set:
-
-                                division_slot_lab_subjects.pop(subject_key, None)
-
-
-
-                        parallel_key = (task.division_id, day_id, slot_id)
-
-                        entries = division_slot_parallel_labs.get(parallel_key, [])
-
-                        entries = [entry for entry in entries if not (entry[0] == str(task.batch_id) and entry[1] == task.subject_id)]
-
-                        if entries:
-
-                            division_slot_parallel_labs[parallel_key] = entries
-
-                        else:
-
-                            division_slot_parallel_labs.pop(parallel_key, None)
-
-                else:
-
-                    used_division_full_slot.discard((task.division_id, day_id, slot_id))
-
-
-
-                if task.session_type != "TUTORIAL":
-
-                    day_key = (task.division_id, day_id)
-
-                    occupied = division_day_slots.get(day_key)
-
-                    if occupied:
-
-                        occupied.discard(slot_id)
-
-                        if not occupied:
-
-                            division_day_slots.pop(day_key, None)
-
-
-
-                    occupied_orders = division_day_slot_orders.get(day_key)
-
-                    if occupied_orders:
-
-                        occupied_orders.discard(slot_order_by_id.get(slot_id, 0))
-
-                        if not occupied_orders:
-
-                            division_day_slot_orders.pop(day_key, None)
-
-            discard_task_slot_orders(task, day_id, slot_ids)
-            discard_theory_subject_slots(task, day_id, slot_ids)
-
-
-            room_usage_counter[room_id] = max(room_usage_counter.get(room_id, 0) - len(slot_ids), 0)
-
-            faculty_load_counter[task.faculty_id] = max(faculty_load_counter.get(task.faculty_id, 0) - len(slot_ids), 0)
-
-
-
-            if task.session_type in ("THEORY", "LAB"):
-
-                div_day_key = (task.division_id, day_id)
-
-                faculty_day_key = (task.faculty_id, day_id)
-
-                division_day_theory_lab_hours[div_day_key] = max(division_day_theory_lab_hours.get(div_day_key, 0) - len(slot_ids), 0)
-
-                faculty_day_theory_lab_hours[faculty_day_key] = max(faculty_day_theory_lab_hours.get(faculty_day_key, 0) - len(slot_ids), 0)
-
-
-
-            if task.group_id and task.group_id in lab_group_slot_binding:
-
-                bound_day, bound_slots = lab_group_slot_binding.get(task.group_id, (None, tuple()))
-
-                if bound_day == day_id and tuple(slot_ids) == tuple(bound_slots):
-
-                    still_bound = any(
-
-                        existing["task"].group_id == task.group_id
-
-                        for existing in scheduled_task_assignments.values()
-
-                        if existing["task"].group_id != task.group_id or task_key(existing["task"]) != key
-
-                    )
-
-                    if not still_bound:
-
-                        lab_group_slot_binding.pop(task.group_id, None)
-
-
-
-            scheduled_task_assignments.pop(key, None)
-
-
-
-        def _can_place(
-
-            task: _SessionTask,
-
-            day_id: int,
-
-            slot_ids: list[str],
-
-            room_id: str,
-
-            *,
-
-            relax_gapless: bool = False,
-
-            relax_parallel_gate: bool = False,
-
-            relax_division_daily: bool = False,
-
-            relax_shift_window: bool = False,
-
-            relax_parallel_binding: bool = False,
-
-            relax_faculty_daily: bool = False,
-
-            relax_daily_slot_cap: bool = False,
-
-        ) -> bool:
-
-            candidate_slots = [slot_row_by_id.get(slot_id) for slot_id in slot_ids]
-
-            if any(slot is None for slot in candidate_slots):
-                return False
-
-            shift_name, _ = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
-            if uses_lunch_slot(task, shift_name, slot_ids):
-                return False
-
-            if task.session_type != "TUTORIAL":
-                _, preferred_shift_window = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
-                if not relax_shift_window and not _block_within_window([slot for slot in candidate_slots if slot], preferred_shift_window):
+    
+    
+    
+                if not scheduled:
+    
+                    # Last-resort fallback: relax only gapless-day pattern for this task
+    
+                    # while preserving room/faculty/division conflict checks and 10-hour hard cap.
+    
+                    room_candidates = lab_rooms if task.session_type == "LAB" else theory_rooms
+    
+                    for day in sorted(
+    
+                        day_rows,
+    
+                        key=lambda row: (theory_subject_day_count(task, int(row.get("day_id") or 0)), seeded_rank(
+                            task.division_id,
+    
+                            task.subject_id,
+    
+                            task.faculty_id,
+    
+                            task.batch_id or "",
+                            task.group_id or "",
+                            "fallback",
+                            row.get("day_id"),
+    
+                        )),
+                    ):
+    
+                        day_id = int(day["day_id"])
+    
+                        candidate_start_indices = sorted(
+    
+                            range(len(slot_rows_ordered)),
+    
+                            key=lambda start_index: candidate_start_priority(
+    
+                                slot_rows_ordered[start_index : start_index + task_duration],
+    
+                                preferred_shift_window,
+    
+                            )
+                            + (
+                                theory_subject_adjacency_count(
+                                    task,
+                                    day_id,
+                                    [str(item["slot_id"]) for item in slot_rows_ordered[start_index : start_index + task_duration]],
+                                ),
+                                seeded_rank(task.division_id, task.subject_id, day_id, "fallback", start_index, task.batch_id or ""),
+                            ),
+                        )
+    
+    
+    
+                        for start_index in candidate_start_indices:
+    
+                            candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
+    
+                            if len(candidate_slots) != task_duration:
+    
+                                continue
+    
+    
+    
+                            if task.session_type != "TUTORIAL" and not _block_within_window(candidate_slots, preferred_shift_window):
+    
+                                continue
+    
+    
+    
+                            if any(
+    
+                                int(candidate_slots[i + 1].get("slot_order") or 0) - int(candidate_slots[i].get("slot_order") or 0) != 1
+    
+                                for i in range(len(candidate_slots) - 1)
+    
+                            ):
+    
+                                continue
+    
+    
+    
+                            slot_ids = [str(item["slot_id"]) for item in candidate_slots]
+                            if uses_lunch_slot(task, preferred_shift_name, slot_ids):
+                                continue
+    
+                            # CONSTRAINT: Prevent consecutive same-subject theory
+                            if task.session_type == "THEORY" and theory_subject_adjacency_count(task, day_id, slot_ids) > 0:
+                                continue
+    
+                            # CONSTRAINT: Avoid consecutive cognitively heavy subjects
+                            if task.session_type == "THEORY" and is_heavy_subject(task.subject_id):
+                                if is_adjacent_to_heavy_subject(task, day_id, slot_ids):
+                                    continue
+    
+                            full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
+                            batch_div_keys = [
+    
+                                (task.division_id, str(task.batch_id), day_id, slot_id)
+    
+                                for slot_id in slot_ids
+    
+                            ]
+    
+                            fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
+    
+                            day_key = (task.division_id, day_id)
+    
+                            occupied = division_day_slots.setdefault(day_key, set())
+    
+                            occupied_orders = division_day_slot_orders.setdefault(day_key, set())
+    
+    
+    
+                            if task.batch_id:
+    
+                                if any(div_key in used_division_full_slot for div_key in full_div_keys):
+    
+                                    continue
+    
+                                if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
+    
+                                    continue
+    
+    
+    
+                                required_parallel = required_parallel_labs_by_division.get(task.division_id)
+    
+                                if task.session_type == "LAB" and required_parallel:
+    
+                                    invalid_parallel_window = False
+    
+                                    opening_new_parallel_window = True
+    
+                                    for slot_id in slot_ids:
+    
+                                        parallel_key = (task.division_id, day_id, slot_id)
+    
+                                        current_entries = division_slot_parallel_labs.get(parallel_key, [])
+    
+                                        current_batches = {entry[0] for entry in current_entries}
+    
+                                        current_subjects = {entry[1] for entry in current_entries}
+    
+                                        if str(task.batch_id) in current_batches:
+    
+                                            invalid_parallel_window = True
+    
+                                            break
+    
+                                        # Same-subject labs across different batches are valid and expected
+    
+                                        # for strict parallel batch-lab packing.
+    
+                                        if len(current_entries) >= required_parallel:
+    
+                                            invalid_parallel_window = True
+    
+                                            break
+    
+                                        if current_entries:
+    
+                                            opening_new_parallel_window = False
+    
+                                    if invalid_parallel_window:
+    
+                                        continue
+    
+    
+    
+                                    incomplete_window_exists = any(
+    
+                                        key[0] == task.division_id
+    
+                                        and key[1] == day_id
+    
+                                        and 0 < len(entries) < required_parallel
+    
+                                        for key, entries in division_slot_parallel_labs.items()
+    
+                                    )
+    
+                                    if incomplete_window_exists and opening_new_parallel_window:
+    
+                                        continue
+    
+                            else:
+    
+                                if any(div_key in used_division_full_slot for div_key in full_div_keys):
+    
+                                    continue
+    
+                                if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
+    
+                                    continue
+    
+    
+    
+                            new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
+    
+                            if task.session_type != "TUTORIAL" and len(occupied) + new_slot_count > max_sessions_per_day:
+    
+                                continue
+    
+    
+    
+                            if any(fac_key in used_faculty_slot for fac_key in fac_keys):
+    
+                                continue
+    
+    
+    
+                            if task.session_type in ("THEORY", "LAB"):
+    
+                                hard_limit = current_hour_limit
+    
+                                div_day_key = (task.division_id, day_id)
+    
+                                current_div_hours = division_day_theory_lab_hours.get(div_day_key, 0)
+    
+                                if current_div_hours + task_duration > hard_limit:
+    
+                                    continue
+    
+    
+    
+                                fac_day_key = (task.faculty_id, day_id)
+    
+                                current_fac_hours = faculty_day_theory_lab_hours.get(fac_day_key, 0)
+    
+                                if current_fac_hours + task_duration > faculty_daily_hard_limit:
+    
+                                    continue
+    
+    
+    
+                            if lab_group_id:
+    
+                                bound_slot = lab_group_slot_binding.get(lab_group_id)
+    
+                                if bound_slot:
+    
+                                    bound_day_id, bound_slot_ids = bound_slot
+    
+                                    if day_id != bound_day_id or tuple(slot_ids) != bound_slot_ids:
+    
+                                        continue
+    
+                                else:
+    
+                                    required_rooms = lab_group_expected_counts.get(lab_group_id, 1)
+    
+                                    precheck_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, required_rooms)
+    
+                                    if len(precheck_room_ids) < required_rooms:
+    
+                                        continue
+    
+    
+    
+                            selected_room_ids = select_rooms_for_block(room_candidates, day_id, slot_ids, group_size)
+    
+                            if len(selected_room_ids) < group_size:
+    
+                                continue
+    
+    
+    
+                            selected_room_id = selected_room_ids[0]
+    
+                            for slot_id in slot_ids:
+    
+                                allocated_entries.append(
+    
+                                    {
+    
+                                        "division_id": task.division_id,
+    
+                                        "faculty_id": task.faculty_id,
+    
+                                        "subject_id": task.subject_id,
+    
+                                        "room_id": selected_room_id,
+    
+                                        "day_id": day_id,
+    
+                                        "slot_id": slot_id,
+    
+                                        "batch_id": task.batch_id,
+    
+                                        "session_type": task.session_type,
+    
+                                    }
+    
+                                )
+    
+                                used_room_slot.add((selected_room_id, day_id, slot_id))
+    
+                                if task.batch_id:
+    
+                                    used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
+    
+                                    used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
+    
+                                    if task.session_type == "LAB":
+    
+                                        key = (task.division_id, day_id, slot_id)
+    
+                                        division_slot_lab_subjects.setdefault(key, set()).add(task.subject_id)
+    
+                                        parallel_key = (task.division_id, day_id, slot_id)
+    
+                                        division_slot_parallel_labs.setdefault(parallel_key, []).append((str(task.batch_id), task.subject_id))
+    
+                                else:
+    
+                                    used_division_full_slot.add((task.division_id, day_id, slot_id))
+    
+                                used_faculty_slot.add((task.faculty_id, day_id, slot_id))
+    
+                                if task.session_type != "TUTORIAL":
+    
+                                    occupied.add(slot_id)
+    
+                                    occupied_orders.add(slot_order_by_id.get(slot_id, 0))
+    
+                            record_task_slot_orders(task, day_id, slot_ids)
+                            record_theory_subject_slots(task, day_id, slot_ids)
+                            if lab_group_id:
+                                lab_group_slot_binding.setdefault(lab_group_id, (day_id, tuple(slot_ids)))
+    
+                            room_usage_counter[selected_room_id] = room_usage_counter.get(selected_room_id, 0) + task_duration
+                            faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + task_duration
+    
+    
+    
+                            if task.session_type in ("THEORY", "LAB"):
+    
+                                div_day_key = (task.division_id, day_id)
+    
+                                division_day_theory_lab_hours[div_day_key] = division_day_theory_lab_hours.get(div_day_key, 0) + task_duration
+    
+                                fac_day_key = (task.faculty_id, day_id)
+    
+                                faculty_day_theory_lab_hours[fac_day_key] = faculty_day_theory_lab_hours.get(fac_day_key, 0) + task_duration
+    
+                                hour_limit_usage[hard_limit] = hour_limit_usage.get(hard_limit, 0) + 1
+    
+    
+    
+                            scheduled_task_assignments[task_key(task)] = {
+    
+                                "task": task,
+    
+                                "day_id": day_id,
+    
+                                "slot_ids": list(slot_ids),
+    
+                                "room_id": selected_room_id,
+    
+                            }
+    
+    
+    
+                            scheduled = True
+    
+                            break
+    
+    
+    
+                        if scheduled:
+    
+                            break
+    
+    
+    
+                if not scheduled:
+    
+                    unresolved_task_pool.append(task)
+    
+                    unresolved_tasks += 1
+    
+                    if len(unresolved_task_samples) < 20:
+    
+                        unresolved_task_samples.append(
+    
+                            {
+    
+                                "division_id": task.division_id,
+    
+                                "faculty_id": task.faculty_id,
+    
+                                "subject_id": task.subject_id,
+    
+                                "batch_id": task.batch_id,
+    
+                                "session_type": task.session_type,
+    
+                                "reason": "no_feasible_slot",
+    
+                            }
+    
+                        )
+    
+    
+    
+            slot_row_by_id = {str(slot.get("slot_id")): slot for slot in slot_rows_ordered}
+    
+    
+    
+            def _remove_assignment(assignment: dict[str, Any]) -> None:
+    
+                task: _SessionTask = assignment["task"]
+    
+                day_id = int(assignment["day_id"])
+    
+                slot_ids = [str(slot_id) for slot_id in assignment["slot_ids"]]
+    
+                room_id = str(assignment["room_id"])
+    
+                key = task_key(task)
+    
+    
+    
+                for slot_id in slot_ids:
+    
+                    used_room_slot.discard((room_id, day_id, slot_id))
+    
+                    used_faculty_slot.discard((task.faculty_id, day_id, slot_id))
+    
+                    if task.batch_id:
+    
+                        used_division_batch_slot.discard((task.division_id, str(task.batch_id), day_id, slot_id))
+    
+                        used_division_any_batch_slot.discard((task.division_id, day_id, slot_id))
+    
+                        if task.session_type == "LAB":
+    
+                            subject_key = (task.division_id, day_id, slot_id)
+    
+                            subject_set = division_slot_lab_subjects.get(subject_key)
+    
+                            if subject_set:
+    
+                                subject_set.discard(task.subject_id)
+    
+                                if not subject_set:
+    
+                                    division_slot_lab_subjects.pop(subject_key, None)
+    
+    
+    
+                            parallel_key = (task.division_id, day_id, slot_id)
+    
+                            entries = division_slot_parallel_labs.get(parallel_key, [])
+    
+                            entries = [entry for entry in entries if not (entry[0] == str(task.batch_id) and entry[1] == task.subject_id)]
+    
+                            if entries:
+    
+                                division_slot_parallel_labs[parallel_key] = entries
+    
+                            else:
+    
+                                division_slot_parallel_labs.pop(parallel_key, None)
+    
+                    else:
+    
+                        used_division_full_slot.discard((task.division_id, day_id, slot_id))
+    
+    
+    
+                    if task.session_type != "TUTORIAL":
+    
+                        day_key = (task.division_id, day_id)
+    
+                        occupied = division_day_slots.get(day_key)
+    
+                        if occupied:
+    
+                            occupied.discard(slot_id)
+    
+                            if not occupied:
+    
+                                division_day_slots.pop(day_key, None)
+    
+    
+    
+                        occupied_orders = division_day_slot_orders.get(day_key)
+    
+                        if occupied_orders:
+    
+                            occupied_orders.discard(slot_order_by_id.get(slot_id, 0))
+    
+                            if not occupied_orders:
+    
+                                division_day_slot_orders.pop(day_key, None)
+    
+                discard_task_slot_orders(task, day_id, slot_ids)
+                discard_theory_subject_slots(task, day_id, slot_ids)
+    
+    
+                room_usage_counter[room_id] = max(room_usage_counter.get(room_id, 0) - len(slot_ids), 0)
+    
+                faculty_load_counter[task.faculty_id] = max(faculty_load_counter.get(task.faculty_id, 0) - len(slot_ids), 0)
+    
+    
+    
+                if task.session_type in ("THEORY", "LAB"):
+    
+                    div_day_key = (task.division_id, day_id)
+    
+                    faculty_day_key = (task.faculty_id, day_id)
+    
+                    division_day_theory_lab_hours[div_day_key] = max(division_day_theory_lab_hours.get(div_day_key, 0) - len(slot_ids), 0)
+    
+                    faculty_day_theory_lab_hours[faculty_day_key] = max(faculty_day_theory_lab_hours.get(faculty_day_key, 0) - len(slot_ids), 0)
+    
+    
+    
+                if task.group_id and task.group_id in lab_group_slot_binding:
+    
+                    bound_day, bound_slots = lab_group_slot_binding.get(task.group_id, (None, tuple()))
+    
+                    if bound_day == day_id and tuple(slot_ids) == tuple(bound_slots):
+    
+                        still_bound = any(
+    
+                            existing["task"].group_id == task.group_id
+    
+                            for existing in scheduled_task_assignments.values()
+    
+                            if existing["task"].group_id != task.group_id or task_key(existing["task"]) != key
+    
+                        )
+    
+                        if not still_bound:
+    
+                            lab_group_slot_binding.pop(task.group_id, None)
+    
+    
+    
+                scheduled_task_assignments.pop(key, None)
+    
+    
+    
+            def _can_place(
+    
+                task: _SessionTask,
+    
+                day_id: int,
+    
+                slot_ids: list[str],
+    
+                room_id: str,
+    
+                *,
+    
+                relax_gapless: bool = False,
+    
+                relax_parallel_gate: bool = False,
+    
+                relax_division_daily: bool = False,
+    
+                relax_shift_window: bool = False,
+    
+                relax_parallel_binding: bool = False,
+    
+                relax_faculty_daily: bool = False,
+    
+                relax_daily_slot_cap: bool = False,
+    
+            ) -> bool:
+    
+                candidate_slots = [slot_row_by_id.get(slot_id) for slot_id in slot_ids]
+    
+                if any(slot is None for slot in candidate_slots):
                     return False
-
-            if any(
-                int(candidate_slots[idx + 1].get("slot_order") or 0) - int(candidate_slots[idx].get("slot_order") or 0) != 1
-
-                for idx in range(len(candidate_slots) - 1)
-
-            ):
-
-                return False
-
-
-
-            full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
-
-            batch_div_keys = [(task.division_id, str(task.batch_id), day_id, slot_id) for slot_id in slot_ids]
-
-            fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
-
-
-
-            if task.batch_id:
-
-                if any(div_key in used_division_full_slot for div_key in full_div_keys):
-
-                    return False
-
-                if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
-
-                    return False
-
-            else:
-
-                if any(div_key in used_division_full_slot for div_key in full_div_keys):
-
-                    return False
-
-                if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
-
-                    return False
-
-
-
-            if any(fac_key in used_faculty_slot for fac_key in fac_keys):
-
-                return False
-
-            if any((room_id, day_id, slot_id) in used_room_slot for slot_id in slot_ids):
-
-                return False
-
-
-
-            day_key = (task.division_id, day_id)
-
-            occupied = division_day_slots.setdefault(day_key, set())
-
-            occupied_orders = division_day_slot_orders.setdefault(day_key, set())
-
-            if task.session_type != "TUTORIAL":
-
-                new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
-
-                daily_slot_cap = max_sessions_per_day + 2 if relax_daily_slot_cap else max_sessions_per_day
-
-                if len(occupied) + new_slot_count > daily_slot_cap:
-
-                    return False
-
-
-
-                proposed_orders = occupied_slot_orders_for_task_day(task, day_id)
-                proposed_orders.update(slot_order_by_id.get(slot_id, 0) for slot_id in slot_ids)
-
+    
                 shift_name, _ = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
-
-                lunch_slot = lunch_slot_order_for_task(task, shift_name)
-                if not relax_gapless and not _is_gapless_day_pattern(proposed_orders, lunch_slot):
-
+                if uses_lunch_slot(task, shift_name, slot_ids):
                     return False
-
-
-
-            if task.session_type in ("THEORY", "LAB"):
-
-                division_limit = division_daily_hard_limit + 2 if relax_division_daily else division_daily_hard_limit
-
-                if division_day_theory_lab_hours.get((task.division_id, day_id), 0) + len(slot_ids) > division_limit:
-
-                    return False
-
-                faculty_limit = 999 if relax_faculty_daily else faculty_daily_hard_limit
-
-                if faculty_day_theory_lab_hours.get((task.faculty_id, day_id), 0) + len(slot_ids) > faculty_limit:
-
-                    return False
-
-
-
-            if task.session_type == "LAB" and task.batch_id:
-
-                required_parallel = required_parallel_labs_by_division.get(task.division_id)
-
-                if required_parallel:
-
-                    opening_new_parallel_window = True
-
-                    for slot_id in slot_ids:
-
-                        parallel_key = (task.division_id, day_id, slot_id)
-
-                        current_entries = division_slot_parallel_labs.get(parallel_key, [])
-
-                        current_batches = {entry[0] for entry in current_entries}
-
-                        if str(task.batch_id) in current_batches:
-
-                            return False
-
-                        if len(current_entries) >= required_parallel:
-
-                            return False
-
-                        if current_entries:
-
-                            opening_new_parallel_window = False
-
-
-
-                    incomplete_window_exists = any(
-
-                        key[0] == task.division_id and key[1] == day_id and 0 < len(entries) < required_parallel
-
-                        for key, entries in division_slot_parallel_labs.items()
-
-                    )
-
-                    if not relax_parallel_gate and incomplete_window_exists and opening_new_parallel_window:
-
-                        return False
-
-
-
-            if task.group_id and task.group_id in strict_parallel_lab_groups:
-
-                bound_slot = lab_group_slot_binding.get(task.group_id)
-
-                if bound_slot:
-
-                    bound_day_id, bound_slot_ids = bound_slot
-
-                    if not relax_parallel_binding and day_id != bound_day_id:
-
-                        return False
-
-                    if not relax_parallel_binding and tuple(slot_ids) != tuple(bound_slot_ids):
-
-                        return False
-
-
-
-            return True
-
-
-
-        def _apply_assignment(task: _SessionTask, day_id: int, slot_ids: list[str], room_id: str) -> None:
-
-            for slot_id in slot_ids:
-
-                used_room_slot.add((room_id, day_id, slot_id))
-
-                used_faculty_slot.add((task.faculty_id, day_id, slot_id))
-
-                if task.batch_id:
-
-                    used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
-
-                    used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
-
-                    if task.session_type == "LAB":
-
-                        subject_key = (task.division_id, day_id, slot_id)
-
-                        division_slot_lab_subjects.setdefault(subject_key, set()).add(task.subject_id)
-
-                        parallel_key = (task.division_id, day_id, slot_id)
-
-                        division_slot_parallel_labs.setdefault(parallel_key, []).append((str(task.batch_id), task.subject_id))
-
-                else:
-
-                    used_division_full_slot.add((task.division_id, day_id, slot_id))
-
-
-
+    
                 if task.session_type != "TUTORIAL":
-
-                    day_key = (task.division_id, day_id)
-
-                    division_day_slots.setdefault(day_key, set()).add(slot_id)
-
-                    division_day_slot_orders.setdefault(day_key, set()).add(slot_order_by_id.get(slot_id, 0))
-
-            record_task_slot_orders(task, day_id, slot_ids)
-            record_theory_subject_slots(task, day_id, slot_ids)
-
-
-            room_usage_counter[room_id] = room_usage_counter.get(room_id, 0) + len(slot_ids)
-
-            faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + len(slot_ids)
-
-            if task.session_type in ("THEORY", "LAB"):
-
-                division_day_theory_lab_hours[(task.division_id, day_id)] = division_day_theory_lab_hours.get((task.division_id, day_id), 0) + len(slot_ids)
-
-                faculty_day_theory_lab_hours[(task.faculty_id, day_id)] = faculty_day_theory_lab_hours.get((task.faculty_id, day_id), 0) + len(slot_ids)
-
-
-
-            if task.group_id and task.group_id in strict_parallel_lab_groups:
-
-                lab_group_slot_binding.setdefault(task.group_id, (day_id, tuple(slot_ids)))
-
-
-
-            scheduled_task_assignments[task_key(task)] = {
-
-                "task": task,
-
-                "day_id": day_id,
-
-                "slot_ids": list(slot_ids),
-
-                "room_id": room_id,
-
-            }
-
-
-
-        def _candidate_options(
-
-            task: _SessionTask,
-
-            max_options: int = 32,
-
-            seed: int = 0,
-
-            *,
-
-            relax_gapless: bool = False,
-
-            relax_parallel_gate: bool = False,
-
-            relax_division_daily: bool = False,
-
-            relax_shift_window: bool = False,
-
-            relax_parallel_binding: bool = False,
-
-            relax_room_pool: bool = False,
-
-            relax_faculty_daily: bool = False,
-
-            relax_daily_slot_cap: bool = False,
-
-        ) -> list[tuple[int, list[str], str]]:
-
-            options: list[tuple[int, list[str], str]] = []
-
-            if relax_room_pool:
-
-                room_pool = list({str(room["room_id"]): room for room in (lab_rooms + theory_rooms)}.values())
-
-            else:
-
-                room_pool = lab_rooms if task.session_type == "LAB" else theory_rooms
-
-            _, preferred_shift_window = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
-
-            task_duration = max(task.duration_slots, 1)
-
-            for day in day_rows:
-
-                day_id = int(day["day_id"])
-
-                for start_index in range(len(slot_rows_ordered) - task_duration + 1):
-
-                    candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
-
-                    slot_ids = [str(item["slot_id"]) for item in candidate_slots]
-
-                    if task.session_type != "TUTORIAL" and not _block_within_window(candidate_slots, preferred_shift_window):
-
-                        continue
-
-
-
-                    room_ids = select_rooms_for_block(room_pool, day_id, slot_ids, 1)
-
-                    for room_id in room_ids:
-
-                        if _can_place(
-
-                            task,
-
-                            day_id,
-
-                            slot_ids,
-
-                            room_id,
-
-                            relax_gapless=relax_gapless,
-
-                            relax_parallel_gate=relax_parallel_gate,
-
-                            relax_division_daily=relax_division_daily,
-
-                            relax_shift_window=relax_shift_window,
-
-                            relax_parallel_binding=relax_parallel_binding,
-
-                            relax_faculty_daily=relax_faculty_daily,
-
-                            relax_daily_slot_cap=relax_daily_slot_cap,
-
-                        ):
-
-                            options.append((day_id, slot_ids, room_id))
-
-
-
-            def option_rank(option: tuple[int, list[str], str]) -> tuple[int, int, int, int]:
-
-                option_day, option_slots, option_room = option
-
-                # Prefer completing existing parallel-lab windows to reduce deadlocks.
-
-                parallel_fill = 0
-
+                    _, preferred_shift_window = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
+                    if not relax_shift_window and not _block_within_window([slot for slot in candidate_slots if slot], preferred_shift_window):
+                        return False
+    
+                if any(
+                    int(candidate_slots[idx + 1].get("slot_order") or 0) - int(candidate_slots[idx].get("slot_order") or 0) != 1
+    
+                    for idx in range(len(candidate_slots) - 1)
+    
+                ):
+    
+                    return False
+    
+    
+    
+                full_div_keys = [(task.division_id, day_id, slot_id) for slot_id in slot_ids]
+    
+                batch_div_keys = [(task.division_id, str(task.batch_id), day_id, slot_id) for slot_id in slot_ids]
+    
+                fac_keys = [(task.faculty_id, day_id, slot_id) for slot_id in slot_ids]
+    
+    
+    
+                if task.batch_id:
+    
+                    if any(div_key in used_division_full_slot for div_key in full_div_keys):
+    
+                        return False
+    
+                    if any(batch_key in used_division_batch_slot for batch_key in batch_div_keys):
+    
+                        return False
+    
+                else:
+    
+                    if any(div_key in used_division_full_slot for div_key in full_div_keys):
+    
+                        return False
+    
+                    if any(div_key in used_division_any_batch_slot for div_key in full_div_keys):
+    
+                        return False
+    
+    
+    
+                if any(fac_key in used_faculty_slot for fac_key in fac_keys):
+    
+                    return False
+    
+                # CONSTRAINT: Prevent consecutive same-subject theory
+                if task.session_type == "THEORY" and theory_subject_adjacency_count(task, day_id, slot_ids) > 0:
+                    return False
+    
+                # CONSTRAINT: Avoid consecutive cognitively heavy subjects
+                if task.session_type == "THEORY" and is_heavy_subject(task.subject_id):
+                    if is_adjacent_to_heavy_subject(task, day_id, slot_ids):
+                        return False
+    
+                if any((room_id, day_id, slot_id) in used_room_slot for slot_id in slot_ids):
+    
+                    return False
+    
+    
+    
+                day_key = (task.division_id, day_id)
+    
+                occupied = division_day_slots.setdefault(day_key, set())
+    
+                occupied_orders = division_day_slot_orders.setdefault(day_key, set())
+    
+                if task.session_type != "TUTORIAL":
+    
+                    new_slot_count = sum(1 for slot_id in slot_ids if slot_id not in occupied)
+    
+                    daily_slot_cap = max_sessions_per_day + 2 if relax_daily_slot_cap else max_sessions_per_day
+    
+                    if len(occupied) + new_slot_count > daily_slot_cap:
+    
+                        return False
+    
+    
+    
+                    proposed_orders = occupied_slot_orders_for_task_day(task, day_id)
+                    proposed_orders.update(slot_order_by_id.get(slot_id, 0) for slot_id in slot_ids)
+    
+                    shift_name, _ = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
+    
+                    lunch_slot = lunch_slot_order_for_task(task, shift_name)
+                    if not relax_gapless and not _is_gapless_day_pattern(proposed_orders, lunch_slot):
+    
+                        return False
+    
+    
+    
+                if task.session_type in ("THEORY", "LAB"):
+    
+                    division_limit = division_daily_hard_limit + 2 if relax_division_daily else division_daily_hard_limit
+    
+                    if division_day_theory_lab_hours.get((task.division_id, day_id), 0) + len(slot_ids) > division_limit:
+    
+                        return False
+    
+                    faculty_limit = 999 if relax_faculty_daily else faculty_daily_hard_limit
+    
+                    if faculty_day_theory_lab_hours.get((task.faculty_id, day_id), 0) + len(slot_ids) > faculty_limit:
+    
+                        return False
+    
+    
+    
                 if task.session_type == "LAB" and task.batch_id:
-
+    
                     required_parallel = required_parallel_labs_by_division.get(task.division_id)
-
+    
                     if required_parallel:
-
-                        for option_slot in option_slots:
-
-                            entries = division_slot_parallel_labs.get((task.division_id, option_day, option_slot), [])
-
-                            if 0 < len(entries) < required_parallel:
-
-                                parallel_fill += 1
-
-
-
-                day_load = len(division_day_slots.get((task.division_id, option_day), set()))
-
-                first_order = slot_order_by_id.get(str(option_slots[0]), 9999)
-
-                tie = seeded_rank(task_key(task), option_day, ",".join(option_slots), option_room, seed)
-
-                return (-parallel_fill, day_load, first_order, tie)
-
-
-
-            options.sort(key=option_rank)
-
-            return options[:max_options]
-
-
-
-        def _repair_parallel_deadlocks() -> int:
-
-            repaired = 0
-
-            deadlock_keys = [
-
-                key
-
-                for key, entries in division_slot_parallel_labs.items()
-
-                if 0 < len(entries) < required_parallel_labs_by_division.get(key[0], 0)
-
-            ]
-
-
-
-            for division_id, day_id, slot_id in deadlock_keys:
-
-                affected_assignments = [
-
-                    assignment
-
-                    for assignment in list(scheduled_task_assignments.values())
-
-                    if assignment["task"].division_id == division_id
-
-                    and assignment["task"].session_type == "LAB"
-
-                    and int(assignment["day_id"]) == int(day_id)
-
-                    and slot_id in assignment["slot_ids"]
-
+    
+                        opening_new_parallel_window = True
+    
+                        for slot_id in slot_ids:
+    
+                            parallel_key = (task.division_id, day_id, slot_id)
+    
+                            current_entries = division_slot_parallel_labs.get(parallel_key, [])
+    
+                            current_batches = {entry[0] for entry in current_entries}
+    
+                            if str(task.batch_id) in current_batches:
+    
+                                return False
+    
+                            if len(current_entries) >= required_parallel:
+    
+                                return False
+    
+                            if current_entries:
+    
+                                opening_new_parallel_window = False
+    
+    
+    
+                        incomplete_window_exists = any(
+    
+                            key[0] == task.division_id and key[1] == day_id and 0 < len(entries) < required_parallel
+    
+                            for key, entries in division_slot_parallel_labs.items()
+    
+                        )
+    
+                        if not relax_parallel_gate and incomplete_window_exists and opening_new_parallel_window:
+    
+                            return False
+    
+    
+    
+                if task.group_id and task.group_id in strict_parallel_lab_groups:
+    
+                    bound_slot = lab_group_slot_binding.get(task.group_id)
+    
+                    if bound_slot:
+    
+                        bound_day_id, bound_slot_ids = bound_slot
+    
+                        if not relax_parallel_binding and day_id != bound_day_id:
+    
+                            return False
+    
+                        if not relax_parallel_binding and tuple(slot_ids) != tuple(bound_slot_ids):
+    
+                            return False
+    
+    
+    
+                return True
+    
+    
+    
+            def _apply_assignment(task: _SessionTask, day_id: int, slot_ids: list[str], room_id: str) -> None:
+    
+                for slot_id in slot_ids:
+    
+                    used_room_slot.add((room_id, day_id, slot_id))
+    
+                    used_faculty_slot.add((task.faculty_id, day_id, slot_id))
+    
+                    if task.batch_id:
+    
+                        used_division_batch_slot.add((task.division_id, str(task.batch_id), day_id, slot_id))
+    
+                        used_division_any_batch_slot.add((task.division_id, day_id, slot_id))
+    
+                        if task.session_type == "LAB":
+    
+                            subject_key = (task.division_id, day_id, slot_id)
+    
+                            division_slot_lab_subjects.setdefault(subject_key, set()).add(task.subject_id)
+    
+                            parallel_key = (task.division_id, day_id, slot_id)
+    
+                            division_slot_parallel_labs.setdefault(parallel_key, []).append((str(task.batch_id), task.subject_id))
+    
+                    else:
+    
+                        used_division_full_slot.add((task.division_id, day_id, slot_id))
+    
+    
+    
+                    if task.session_type != "TUTORIAL":
+    
+                        day_key = (task.division_id, day_id)
+    
+                        division_day_slots.setdefault(day_key, set()).add(slot_id)
+    
+                        division_day_slot_orders.setdefault(day_key, set()).add(slot_order_by_id.get(slot_id, 0))
+    
+                record_task_slot_orders(task, day_id, slot_ids)
+                record_theory_subject_slots(task, day_id, slot_ids)
+    
+    
+                room_usage_counter[room_id] = room_usage_counter.get(room_id, 0) + len(slot_ids)
+    
+                faculty_load_counter[task.faculty_id] = faculty_load_counter.get(task.faculty_id, 0) + len(slot_ids)
+    
+                if task.session_type in ("THEORY", "LAB"):
+    
+                    division_day_theory_lab_hours[(task.division_id, day_id)] = division_day_theory_lab_hours.get((task.division_id, day_id), 0) + len(slot_ids)
+    
+                    faculty_day_theory_lab_hours[(task.faculty_id, day_id)] = faculty_day_theory_lab_hours.get((task.faculty_id, day_id), 0) + len(slot_ids)
+    
+    
+    
+                if task.group_id and task.group_id in strict_parallel_lab_groups:
+    
+                    lab_group_slot_binding.setdefault(task.group_id, (day_id, tuple(slot_ids)))
+    
+    
+    
+                scheduled_task_assignments[task_key(task)] = {
+    
+                    "task": task,
+    
+                    "day_id": day_id,
+    
+                    "slot_ids": list(slot_ids),
+    
+                    "room_id": room_id,
+    
+                }
+    
+    
+    
+            def _candidate_options(
+    
+                task: _SessionTask,
+    
+                max_options: int = 32,
+    
+                seed: int = 0,
+    
+                *,
+    
+                relax_gapless: bool = False,
+    
+                relax_parallel_gate: bool = False,
+    
+                relax_division_daily: bool = False,
+    
+                relax_shift_window: bool = False,
+    
+                relax_parallel_binding: bool = False,
+    
+                relax_room_pool: bool = False,
+    
+                relax_faculty_daily: bool = False,
+    
+                relax_daily_slot_cap: bool = False,
+    
+            ) -> list[tuple[int, list[str], str]]:
+    
+                options: list[tuple[int, list[str], str]] = []
+    
+                if relax_room_pool:
+    
+                    room_pool = list({str(room["room_id"]): room for room in (lab_rooms + theory_rooms)}.values())
+    
+                else:
+    
+                    room_pool = lab_rooms if task.session_type == "LAB" else theory_rooms
+    
+                _, preferred_shift_window = division_shift_assignments.get(task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
+    
+                task_duration = max(task.duration_slots, 1)
+    
+                for day in day_rows:
+    
+                    day_id = int(day["day_id"])
+    
+                    for start_index in range(len(slot_rows_ordered) - task_duration + 1):
+    
+                        candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
+    
+                        slot_ids = [str(item["slot_id"]) for item in candidate_slots]
+    
+                        if task.session_type != "TUTORIAL" and not _block_within_window(candidate_slots, preferred_shift_window):
+    
+                            continue
+    
+    
+    
+                        room_ids = select_rooms_for_block(room_pool, day_id, slot_ids, 1)
+    
+                        for room_id in room_ids:
+    
+                            if _can_place(
+    
+                                task,
+    
+                                day_id,
+    
+                                slot_ids,
+    
+                                room_id,
+    
+                                relax_gapless=relax_gapless,
+    
+                                relax_parallel_gate=relax_parallel_gate,
+    
+                                relax_division_daily=relax_division_daily,
+    
+                                relax_shift_window=relax_shift_window,
+    
+                                relax_parallel_binding=relax_parallel_binding,
+    
+                                relax_faculty_daily=relax_faculty_daily,
+    
+                                relax_daily_slot_cap=relax_daily_slot_cap,
+    
+                            ):
+    
+                                options.append((day_id, slot_ids, room_id))
+    
+    
+    
+                def option_rank(option: tuple[int, list[str], str]) -> tuple[int, int, int, int]:
+    
+                    option_day, option_slots, option_room = option
+    
+                    # Prefer completing existing parallel-lab windows to reduce deadlocks.
+    
+                    parallel_fill = 0
+    
+                    if task.session_type == "LAB" and task.batch_id:
+    
+                        required_parallel = required_parallel_labs_by_division.get(task.division_id)
+    
+                        if required_parallel:
+    
+                            for option_slot in option_slots:
+    
+                                entries = division_slot_parallel_labs.get((task.division_id, option_day, option_slot), [])
+    
+                                if 0 < len(entries) < required_parallel:
+    
+                                    parallel_fill += 1
+    
+    
+    
+                    day_load = len(division_day_slots.get((task.division_id, option_day), set()))
+    
+                    first_order = slot_order_by_id.get(str(option_slots[0]), 9999)
+    
+                    tie = seeded_rank(task_key(task), option_day, ",".join(option_slots), option_room, seed)
+    
+                    return (-parallel_fill, day_load, first_order, tie)
+    
+    
+    
+                options.sort(key=option_rank)
+    
+                return options[:max_options]
+    
+    
+    
+            def _repair_parallel_deadlocks() -> int:
+    
+                repaired = 0
+    
+                deadlock_keys = [
+    
+                    key
+    
+                    for key, entries in division_slot_parallel_labs.items()
+    
+                    if 0 < len(entries) < required_parallel_labs_by_division.get(key[0], 0)
+    
                 ]
-
-                if not affected_assignments:
-
-                    continue
-
-
-
-                original_payload = [
-
-                    {
-
-                        "task": entry["task"],
-
-                        "day_id": entry["day_id"],
-
-                        "slot_ids": list(entry["slot_ids"]),
-
-                        "room_id": entry["room_id"],
-
+    
+    
+    
+                for division_id, day_id, slot_id in deadlock_keys:
+    
+                    affected_assignments = [
+    
+                        assignment
+    
+                        for assignment in list(scheduled_task_assignments.values())
+    
+                        if assignment["task"].division_id == division_id
+    
+                        and assignment["task"].session_type == "LAB"
+    
+                        and int(assignment["day_id"]) == int(day_id)
+    
+                        and slot_id in assignment["slot_ids"]
+    
+                    ]
+    
+                    if not affected_assignments:
+    
+                        continue
+    
+    
+    
+                    original_payload = [
+    
+                        {
+    
+                            "task": entry["task"],
+    
+                            "day_id": entry["day_id"],
+    
+                            "slot_ids": list(entry["slot_ids"]),
+    
+                            "room_id": entry["room_id"],
+    
+                        }
+    
+                        for entry in affected_assignments
+    
+                    ]
+    
+    
+    
+                    for entry in affected_assignments:
+    
+                        _remove_assignment(entry)
+    
+    
+    
+                    resolved = True
+    
+                    for entry in sorted(original_payload, key=lambda item: item["task"].faculty_id):
+    
+                        options = _candidate_options(entry["task"], max_options=10)
+    
+                        if not options:
+    
+                            resolved = False
+    
+                            break
+    
+                        selected_day, selected_slots, selected_room = options[0]
+    
+                        _apply_assignment(entry["task"], selected_day, selected_slots, selected_room)
+    
+    
+    
+                    if resolved:
+    
+                        repaired += len(original_payload)
+    
+                        continue
+    
+    
+    
+                    for entry in original_payload:
+    
+                        if task_key(entry["task"]) in scheduled_task_assignments:
+    
+                            _remove_assignment(scheduled_task_assignments[task_key(entry["task"])])
+    
+                    for entry in original_payload:
+    
+                        _apply_assignment(entry["task"], int(entry["day_id"]), list(entry["slot_ids"]), str(entry["room_id"]))
+    
+    
+    
+                return repaired
+    
+    
+    
+            def _place_unresolved_backtracking(
+    
+                pending: list[_SessionTask],
+    
+                depth: int = 0,
+    
+                limit: int = 96,
+    
+                option_cap: int = 24,
+    
+                seed: int = 0,
+    
+                relax_gapless: bool = False,
+    
+                relax_parallel_gate: bool = False,
+    
+                relax_division_daily: bool = False,
+    
+                relax_shift_window: bool = False,
+    
+                relax_parallel_binding: bool = False,
+    
+                relax_room_pool: bool = False,
+    
+                relax_faculty_daily: bool = False,
+    
+                relax_daily_slot_cap: bool = False,
+    
+            ) -> bool:
+    
+                if not pending:
+    
+                    return True
+    
+                if depth >= limit:
+    
+                    return False
+    
+    
+    
+                scheduled_by_division: dict[str, int] = {}
+    
+                requested_by_division: dict[str, int] = {}
+    
+                for requested_task in tasks:
+    
+                    requested_by_division[requested_task.division_id] = requested_by_division.get(requested_task.division_id, 0) + 1
+    
+                for assignment in scheduled_task_assignments.values():
+    
+                    div_id = assignment["task"].division_id
+    
+                    scheduled_by_division[div_id] = scheduled_by_division.get(div_id, 0) + 1
+    
+    
+    
+                def pending_rank(item: _SessionTask) -> tuple[int, int, int]:
+    
+                    candidate_count = len(
+    
+                        _candidate_options(
+    
+                            item,
+    
+                            max_options=option_cap,
+    
+                            seed=seed + depth,
+    
+                            relax_gapless=relax_gapless,
+    
+                            relax_parallel_gate=relax_parallel_gate,
+    
+                            relax_division_daily=relax_division_daily,
+    
+                            relax_shift_window=relax_shift_window,
+    
+                            relax_parallel_binding=relax_parallel_binding,
+    
+                            relax_room_pool=relax_room_pool,
+    
+                            relax_faculty_daily=relax_faculty_daily,
+    
+                            relax_daily_slot_cap=relax_daily_slot_cap,
+    
+                        )
+    
+                    )
+    
+                    division_deficit = requested_by_division.get(item.division_id, 0) - scheduled_by_division.get(item.division_id, 0)
+    
+                    year_priority = 0 if item.year_level == "TY" else 1
+    
+                    return (year_priority, -division_deficit, candidate_count)
+    
+    
+    
+                pending_sorted = sorted(pending, key=pending_rank)
+    
+                current = pending_sorted[0]
+    
+                remainder = pending_sorted[1:]
+    
+                options = _candidate_options(
+    
+                    current,
+    
+                    max_options=option_cap,
+    
+                    seed=seed + depth,
+    
+                    relax_gapless=relax_gapless,
+    
+                    relax_parallel_gate=relax_parallel_gate,
+    
+                    relax_division_daily=relax_division_daily,
+    
+                    relax_shift_window=relax_shift_window,
+    
+                    relax_parallel_binding=relax_parallel_binding,
+    
+                    relax_room_pool=relax_room_pool,
+    
+                    relax_faculty_daily=relax_faculty_daily,
+    
+                    relax_daily_slot_cap=relax_daily_slot_cap,
+    
+                )
+    
+                if not options:
+    
+                    return False
+    
+    
+    
+                for day_id, slot_ids, room_id in options:
+    
+                    _apply_assignment(current, day_id, slot_ids, room_id)
+    
+                    if _place_unresolved_backtracking(
+    
+                        remainder,
+    
+                        depth + 1,
+    
+                        limit,
+    
+                        option_cap,
+    
+                        seed,
+    
+                        relax_gapless=relax_gapless,
+    
+                        relax_parallel_gate=relax_parallel_gate,
+    
+                        relax_division_daily=relax_division_daily,
+    
+                        relax_shift_window=relax_shift_window,
+    
+                        relax_parallel_binding=relax_parallel_binding,
+    
+                        relax_room_pool=relax_room_pool,
+    
+                        relax_faculty_daily=relax_faculty_daily,
+    
+                        relax_daily_slot_cap=relax_daily_slot_cap,
+    
+                    ):
+    
+                        return True
+    
+                    current_assignment = scheduled_task_assignments.get(task_key(current))
+    
+                    if current_assignment:
+    
+                        _remove_assignment(current_assignment)
+    
+                return False
+    
+    
+    
+            def _multi_attempt_backtracking(
+    
+                pending: list[_SessionTask],
+    
+                attempts: int,
+    
+                limit: int,
+    
+                option_cap: int,
+    
+                *,
+    
+                relax_gapless: bool = False,
+    
+                relax_parallel_gate: bool = False,
+    
+                relax_division_daily: bool = False,
+    
+                relax_shift_window: bool = False,
+    
+                relax_parallel_binding: bool = False,
+    
+                relax_room_pool: bool = False,
+    
+                relax_faculty_daily: bool = False,
+    
+                relax_daily_slot_cap: bool = False,
+    
+            ) -> bool:
+    
+                if not pending:
+    
+                    return True
+    
+                for attempt in range(attempts):
+    
+                    if _place_unresolved_backtracking(
+    
+                        pending,
+    
+                        depth=0,
+    
+                        limit=limit,
+    
+                        option_cap=option_cap,
+    
+                        seed=attempt + 1,
+    
+                        relax_gapless=relax_gapless,
+    
+                        relax_parallel_gate=relax_parallel_gate,
+    
+                        relax_division_daily=relax_division_daily,
+    
+                        relax_shift_window=relax_shift_window,
+    
+                        relax_parallel_binding=relax_parallel_binding,
+    
+                        relax_room_pool=relax_room_pool,
+    
+                        relax_faculty_daily=relax_faculty_daily,
+    
+                        relax_daily_slot_cap=relax_daily_slot_cap,
+    
+                    ):
+    
+                        return True
+    
+                return False
+    
+    
+    
+            def _snapshot_assignment(entry: dict[str, Any]) -> dict[str, Any]:
+    
+                return {
+    
+                    "task": entry["task"],
+    
+                    "day_id": int(entry["day_id"]),
+    
+                    "slot_ids": [str(slot_id) for slot_id in entry["slot_ids"]],
+    
+                    "room_id": str(entry["room_id"]),
+    
+                }
+    
+    
+    
+            def _repack_with_movable(max_movable: int, include_theory: bool, include_labs: bool) -> int:
+    
+                unresolved_now = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
+    
+                if not unresolved_now:
+    
+                    return 0
+    
+    
+    
+                before_count = len(scheduled_task_assignments)
+    
+    
+    
+                movable_candidates = []
+    
+                for assignment in scheduled_task_assignments.values():
+    
+                    task = assignment["task"]
+    
+                    if task.session_type == "TUTORIAL":
+    
+                        movable_candidates.append(assignment)
+    
+                    elif include_theory and task.session_type == "THEORY":
+    
+                        movable_candidates.append(assignment)
+    
+                    elif include_labs and task.session_type == "LAB":
+    
+                        movable_candidates.append(assignment)
+    
+    
+    
+                if not movable_candidates:
+    
+                    return 0
+    
+    
+    
+                movable_candidates.sort(
+    
+                    key=lambda assignment: (
+    
+                        0 if division_year_by_id.get(assignment["task"].division_id, "") != "SY" else 1,
+    
+                        0 if assignment["task"].session_type == "TUTORIAL" else 1,
+    
+                        1 if assignment["task"].session_type == "THEORY" else 2,
+    
+                        int(assignment["day_id"]),
+    
+                        min(slot_order_by_id.get(str(slot_id), 9999) for slot_id in assignment["slot_ids"]),
+    
+                    )
+    
+                )
+    
+                selected = movable_candidates[:max_movable]
+    
+                removed_snapshots = [_snapshot_assignment(entry) for entry in selected]
+    
+    
+    
+                for entry in selected:
+    
+                    _remove_assignment(entry)
+    
+    
+    
+                repack_pending = unresolved_now + [entry["task"] for entry in removed_snapshots]
+    
+                limit = min(max(len(repack_pending) + 24, 36), 120)
+    
+                success = _multi_attempt_backtracking(
+    
+                    repack_pending,
+    
+                    attempts=1,
+    
+                    limit=min(limit, 16),
+    
+                    option_cap=8,
+    
+                    relax_gapless=True,
+    
+                    relax_division_daily=True,
+    
+                    relax_shift_window=True,
+    
+                    relax_parallel_binding=True,
+    
+                    relax_room_pool=True,
+    
+                )
+    
+                if not success:
+    
+                    success = _multi_attempt_backtracking(
+    
+                        repack_pending,
+    
+                        attempts=1,
+    
+                        limit=min(limit + 8, 24),
+    
+                        option_cap=8,
+    
+                        relax_gapless=True,
+    
+                        relax_parallel_gate=True,
+    
+                        relax_division_daily=True,
+    
+                        relax_shift_window=True,
+    
+                        relax_parallel_binding=True,
+    
+                        relax_room_pool=True,
+    
+                    )
+    
+                if success:
+    
+                    return max(len(scheduled_task_assignments) - before_count, 0)
+    
+    
+    
+                # If full solve failed, keep any partial gains from a greedy recovery sweep.
+    
+                pending_sorted = sorted(
+    
+                    repack_pending,
+    
+                    key=lambda item: (
+    
+                        0 if item.year_level == "SY" else 1,
+    
+                        len(_candidate_options(item, max_options=24, seed=seeded_rank("partial", task_key(item)), relax_division_daily=True, relax_shift_window=True, relax_parallel_binding=True, relax_room_pool=True)),
+    
+                    ),
+    
+                )
+    
+                for pending_task in pending_sorted:
+    
+                    if task_key(pending_task) in scheduled_task_assignments:
+    
+                        continue
+    
+                    options = _candidate_options(
+    
+                        pending_task,
+    
+                        max_options=24,
+    
+                        seed=seeded_rank("partial", task_key(pending_task)),
+    
+                        relax_division_daily=True,
+    
+                        relax_shift_window=True,
+    
+                        relax_parallel_binding=True,
+    
+                        relax_room_pool=True,
+    
+                    )
+    
+                    if options:
+    
+                        day_id, slot_ids, room_id = options[0]
+    
+                        _apply_assignment(pending_task, day_id, slot_ids, room_id)
+    
+    
+    
+                after_count = len(scheduled_task_assignments)
+    
+                if after_count > before_count:
+    
+                    return after_count - before_count
+    
+    
+    
+                # Rollback failed repack attempt.
+    
+                for task in repack_pending:
+    
+                    existing = scheduled_task_assignments.get(task_key(task))
+    
+                    if existing:
+    
+                        _remove_assignment(existing)
+    
+                for snapshot in removed_snapshots:
+    
+                    _apply_assignment(snapshot["task"], snapshot["day_id"], list(snapshot["slot_ids"]), snapshot["room_id"])
+    
+                return 0
+    
+    
+    
+            repaired_from_deadlocks = _repair_parallel_deadlocks()
+    
+            unresolved_pending = [task for task in unresolved_task_pool if task_key(task) not in scheduled_task_assignments]
+    
+            if unresolved_pending:
+    
+                _multi_attempt_backtracking(unresolved_pending, attempts=0, limit=0, option_cap=0, relax_parallel_binding=True, relax_room_pool=True)
+    
+            unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
+    
+            if unresolved_pending:
+    
+                lab_first_pending = sorted(
+    
+                    unresolved_pending,
+    
+                    key=lambda item: (
+    
+                        0 if item.session_type == "LAB" else 1,
+    
+                        0 if item.year_level == "TY" else 1,
+    
+                    ),
+    
+                )
+    
+                for pending_task in lab_first_pending:
+    
+                    if task_key(pending_task) in scheduled_task_assignments:
+    
+                        continue
+    
+                    options = _candidate_options(
+    
+                        pending_task,
+    
+                        max_options=24,
+    
+                        seed=seeded_rank("final-greedy", task_key(pending_task)),
+    
+                        relax_gapless=True,
+    
+                        relax_parallel_gate=True,
+    
+                        relax_division_daily=True,
+    
+                        relax_shift_window=True,
+    
+                        relax_parallel_binding=True,
+    
+                        relax_room_pool=True,
+    
+                        relax_faculty_daily=True,
+    
+                        relax_daily_slot_cap=True,
+    
+                    )
+    
+                    if options:
+    
+                        day_id, slot_ids, room_id = options[0]
+    
+                        _apply_assignment(pending_task, day_id, slot_ids, room_id)
+    
+    
+    
+            unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
+    
+            if 0 < len(unresolved_pending) <= 3:
+    
+                _multi_attempt_backtracking(
+    
+                    unresolved_pending,
+    
+                    attempts=4,
+    
+                    limit=12,
+    
+                    option_cap=12,
+    
+                    relax_gapless=True,
+    
+                    relax_parallel_gate=True,
+    
+                    relax_division_daily=True,
+    
+                    relax_shift_window=True,
+    
+                    relax_parallel_binding=True,
+    
+                    relax_room_pool=True,
+    
+                    relax_faculty_daily=True,
+    
+                    relax_daily_slot_cap=True,
+    
+                )
+    
+    
+    
+            unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
+    
+            if unresolved_pending:
+    
+                fallback_room_pool = list({str(room["room_id"]): room for room in (lab_rooms + theory_rooms)}.values())
+    
+                for pending_task in unresolved_pending:
+    
+                    if task_key(pending_task) in scheduled_task_assignments:
+    
+                        continue
+    
+                    task_duration = max(pending_task.duration_slots, 1)
+    
+                    placed = False
+    
+                    for day in day_rows:
+    
+                        day_id = int(day["day_id"])
+    
+                        for start_index in range(len(slot_rows_ordered) - task_duration + 1):
+    
+                            candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
+    
+                            if len(candidate_slots) != task_duration:
+                                continue
+                            slot_ids = [str(item["slot_id"]) for item in candidate_slots]
+                            shift_name, _ = division_shift_assignments.get(pending_task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
+                            if uses_lunch_slot(pending_task, shift_name, slot_ids):
+                                continue
+                            if any((pending_task.faculty_id, day_id, slot_id) in used_faculty_slot for slot_id in slot_ids):
+                                continue
+                            if pending_task.batch_id:
+    
+                                if any((pending_task.division_id, str(pending_task.batch_id), day_id, slot_id) in used_division_batch_slot for slot_id in slot_ids):
+    
+                                    continue
+    
+                            else:
+    
+                                if any((pending_task.division_id, day_id, slot_id) in used_division_full_slot for slot_id in slot_ids):
+    
+                                    continue
+    
+                                if any((pending_task.division_id, day_id, slot_id) in used_division_any_batch_slot for slot_id in slot_ids):
+    
+                                    continue
+    
+                            room_id = None
+    
+                            for room in fallback_room_pool:
+    
+                                candidate_room_id = str(room["room_id"])
+    
+                                if all((candidate_room_id, day_id, slot_id) not in used_room_slot for slot_id in slot_ids):
+    
+                                    room_id = candidate_room_id
+    
+                                    break
+    
+                            if not room_id:
+    
+                                continue
+    
+                            _apply_assignment(pending_task, day_id, slot_ids, room_id)
+    
+                            placed = True
+    
+                            break
+    
+                        if placed:
+    
+                            break
+    
+    
+    
+            repack_moves = 0
+    
+            if any(task_key(task) not in scheduled_task_assignments for task in tasks):
+    
+                # Escalate search by temporarily moving flexible sessions.
+    
+                repack_moves += _repack_with_movable(max_movable=12, include_theory=False, include_labs=False)
+    
+    
+    
+            unresolved_tasks = max(len(tasks) - len(scheduled_task_assignments), 0)
+    
+            unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
+    
+            unresolved_task_samples = [
+    
+                {
+    
+                    "division_id": task.division_id,
+    
+                    "faculty_id": task.faculty_id,
+    
+                    "subject_id": task.subject_id,
+    
+                    "batch_id": task.batch_id,
+    
+                    "session_type": task.session_type,
+    
+                    "reason": "no_feasible_slot_after_backtracking",
+    
+                }
+    
+                for task in unresolved_pending[:20]
+    
+            ]
+    
+            # Evaluate this candidate
+            attempt_unresolved = len(tasks) - len(scheduled_task_assignments)
+            attempt_score_dict = compute_quality_score(scheduled_task_assignments)
+            attempt_score = attempt_score_dict["overall_quality_score"]
+            is_valid, validation_errors = validate_timetable(scheduled_task_assignments)
+            
+            curr_validity = 0 if is_valid else 1
+            
+            is_better = False
+            if best_assignment_snapshot is None:
+                is_better = True
+            else:
+                if curr_validity < best_validity:
+                    is_better = True
+                elif curr_validity == best_validity:
+                    if attempt_unresolved < best_unresolved:
+                        is_better = True
+                    elif attempt_unresolved == best_unresolved:
+                        if attempt_score > best_score:
+                            is_better = True
+                            
+            if is_better:
+                best_validity = curr_validity
+                best_unresolved = attempt_unresolved
+                best_score = attempt_score
+                best_quality_opt = copy.deepcopy(attempt_score_dict)
+                best_candidate_rejections = candidate_rejections
+                best_repaired_from_deadlocks = repaired_from_deadlocks
+                best_repack_moves = repack_moves
+                best_unresolved_task_samples = copy.deepcopy(unresolved_task_samples)
+                best_validation_errors = list(validation_errors)
+                
+                best_assignment_snapshot = {}
+                for k, v in scheduled_task_assignments.items():
+                    best_assignment_snapshot[k] = {
+                        "task": v["task"],
+                        "day_id": v["day_id"],
+                        "slot_ids": list(v["slot_ids"]),
+                        "room_id": v["room_id"]
                     }
 
-                    for entry in affected_assignments
-
-                ]
-
-
-
-                for entry in affected_assignments:
-
-                    _remove_assignment(entry)
-
-
-
-                resolved = True
-
-                for entry in sorted(original_payload, key=lambda item: item["task"].faculty_id):
-
-                    options = _candidate_options(entry["task"], max_options=10)
-
-                    if not options:
-
-                        resolved = False
-
-                        break
-
-                    selected_day, selected_slots, selected_room = options[0]
-
-                    _apply_assignment(entry["task"], selected_day, selected_slots, selected_room)
-
-
-
-                if resolved:
-
-                    repaired += len(original_payload)
-
-                    continue
-
-
-
-                for entry in original_payload:
-
-                    if task_key(entry["task"]) in scheduled_task_assignments:
-
-                        _remove_assignment(scheduled_task_assignments[task_key(entry["task"])])
-
-                for entry in original_payload:
-
-                    _apply_assignment(entry["task"], int(entry["day_id"]), list(entry["slot_ids"]), str(entry["room_id"]))
-
-
-
-            return repaired
-
-
-
-        def _place_unresolved_backtracking(
-
-            pending: list[_SessionTask],
-
-            depth: int = 0,
-
-            limit: int = 96,
-
-            option_cap: int = 24,
-
-            seed: int = 0,
-
-            relax_gapless: bool = False,
-
-            relax_parallel_gate: bool = False,
-
-            relax_division_daily: bool = False,
-
-            relax_shift_window: bool = False,
-
-            relax_parallel_binding: bool = False,
-
-            relax_room_pool: bool = False,
-
-            relax_faculty_daily: bool = False,
-
-            relax_daily_slot_cap: bool = False,
-
-        ) -> bool:
-
-            if not pending:
-
-                return True
-
-            if depth >= limit:
-
-                return False
-
-
-
-            scheduled_by_division: dict[str, int] = {}
-
-            requested_by_division: dict[str, int] = {}
-
-            for requested_task in tasks:
-
-                requested_by_division[requested_task.division_id] = requested_by_division.get(requested_task.division_id, 0) + 1
-
-            for assignment in scheduled_task_assignments.values():
-
-                div_id = assignment["task"].division_id
-
-                scheduled_by_division[div_id] = scheduled_by_division.get(div_id, 0) + 1
-
-
-
-            def pending_rank(item: _SessionTask) -> tuple[int, int, int]:
-
-                candidate_count = len(
-
-                    _candidate_options(
-
-                        item,
-
-                        max_options=option_cap,
-
-                        seed=seed + depth,
-
-                        relax_gapless=relax_gapless,
-
-                        relax_parallel_gate=relax_parallel_gate,
-
-                        relax_division_daily=relax_division_daily,
-
-                        relax_shift_window=relax_shift_window,
-
-                        relax_parallel_binding=relax_parallel_binding,
-
-                        relax_room_pool=relax_room_pool,
-
-                        relax_faculty_daily=relax_faculty_daily,
-
-                        relax_daily_slot_cap=relax_daily_slot_cap,
-
-                    )
-
-                )
-
-                division_deficit = requested_by_division.get(item.division_id, 0) - scheduled_by_division.get(item.division_id, 0)
-
-                year_priority = 0 if item.year_level == "TY" else 1
-
-                return (year_priority, -division_deficit, candidate_count)
-
-
-
-            pending_sorted = sorted(pending, key=pending_rank)
-
-            current = pending_sorted[0]
-
-            remainder = pending_sorted[1:]
-
-            options = _candidate_options(
-
-                current,
-
-                max_options=option_cap,
-
-                seed=seed + depth,
-
-                relax_gapless=relax_gapless,
-
-                relax_parallel_gate=relax_parallel_gate,
-
-                relax_division_daily=relax_division_daily,
-
-                relax_shift_window=relax_shift_window,
-
-                relax_parallel_binding=relax_parallel_binding,
-
-                relax_room_pool=relax_room_pool,
-
-                relax_faculty_daily=relax_faculty_daily,
-
-                relax_daily_slot_cap=relax_daily_slot_cap,
-
-            )
-
-            if not options:
-
-                return False
-
-
-
-            for day_id, slot_ids, room_id in options:
-
-                _apply_assignment(current, day_id, slot_ids, room_id)
-
-                if _place_unresolved_backtracking(
-
-                    remainder,
-
-                    depth + 1,
-
-                    limit,
-
-                    option_cap,
-
-                    seed,
-
-                    relax_gapless=relax_gapless,
-
-                    relax_parallel_gate=relax_parallel_gate,
-
-                    relax_division_daily=relax_division_daily,
-
-                    relax_shift_window=relax_shift_window,
-
-                    relax_parallel_binding=relax_parallel_binding,
-
-                    relax_room_pool=relax_room_pool,
-
-                    relax_faculty_daily=relax_faculty_daily,
-
-                    relax_daily_slot_cap=relax_daily_slot_cap,
-
-                ):
-
-                    return True
-
-                current_assignment = scheduled_task_assignments.get(task_key(current))
-
-                if current_assignment:
-
-                    _remove_assignment(current_assignment)
-
-            return False
-
-
-
-        def _multi_attempt_backtracking(
-
-            pending: list[_SessionTask],
-
-            attempts: int,
-
-            limit: int,
-
-            option_cap: int,
-
-            *,
-
-            relax_gapless: bool = False,
-
-            relax_parallel_gate: bool = False,
-
-            relax_division_daily: bool = False,
-
-            relax_shift_window: bool = False,
-
-            relax_parallel_binding: bool = False,
-
-            relax_room_pool: bool = False,
-
-            relax_faculty_daily: bool = False,
-
-            relax_daily_slot_cap: bool = False,
-
-        ) -> bool:
-
-            if not pending:
-
-                return True
-
-            for attempt in range(attempts):
-
-                if _place_unresolved_backtracking(
-
-                    pending,
-
-                    depth=0,
-
-                    limit=limit,
-
-                    option_cap=option_cap,
-
-                    seed=attempt + 1,
-
-                    relax_gapless=relax_gapless,
-
-                    relax_parallel_gate=relax_parallel_gate,
-
-                    relax_division_daily=relax_division_daily,
-
-                    relax_shift_window=relax_shift_window,
-
-                    relax_parallel_binding=relax_parallel_binding,
-
-                    relax_room_pool=relax_room_pool,
-
-                    relax_faculty_daily=relax_faculty_daily,
-
-                    relax_daily_slot_cap=relax_daily_slot_cap,
-
-                ):
-
-                    return True
-
-            return False
-
-
-
-        def _snapshot_assignment(entry: dict[str, Any]) -> dict[str, Any]:
-
-            return {
-
-                "task": entry["task"],
-
-                "day_id": int(entry["day_id"]),
-
-                "slot_ids": [str(slot_id) for slot_id in entry["slot_ids"]],
-
-                "room_id": str(entry["room_id"]),
-
-            }
-
-
-
-        def _repack_with_movable(max_movable: int, include_theory: bool, include_labs: bool) -> int:
-
-            unresolved_now = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
-
-            if not unresolved_now:
-
-                return 0
-
-
-
-            before_count = len(scheduled_task_assignments)
-
-
-
-            movable_candidates = []
-
-            for assignment in scheduled_task_assignments.values():
-
-                task = assignment["task"]
-
-                if task.session_type == "TUTORIAL":
-
-                    movable_candidates.append(assignment)
-
-                elif include_theory and task.session_type == "THEORY":
-
-                    movable_candidates.append(assignment)
-
-                elif include_labs and task.session_type == "LAB":
-
-                    movable_candidates.append(assignment)
-
-
-
-            if not movable_candidates:
-
-                return 0
-
-
-
-            movable_candidates.sort(
-
-                key=lambda assignment: (
-
-                    0 if division_year_by_id.get(assignment["task"].division_id, "") != "SY" else 1,
-
-                    0 if assignment["task"].session_type == "TUTORIAL" else 1,
-
-                    1 if assignment["task"].session_type == "THEORY" else 2,
-
-                    int(assignment["day_id"]),
-
-                    min(slot_order_by_id.get(str(slot_id), 9999) for slot_id in assignment["slot_ids"]),
-
-                )
-
-            )
-
-            selected = movable_candidates[:max_movable]
-
-            removed_snapshots = [_snapshot_assignment(entry) for entry in selected]
-
-
-
-            for entry in selected:
-
-                _remove_assignment(entry)
-
-
-
-            repack_pending = unresolved_now + [entry["task"] for entry in removed_snapshots]
-
-            limit = min(max(len(repack_pending) + 24, 36), 120)
-
-            success = _multi_attempt_backtracking(
-
-                repack_pending,
-
-                attempts=1,
-
-                limit=min(limit, 16),
-
-                option_cap=8,
-
-                relax_gapless=True,
-
-                relax_division_daily=True,
-
-                relax_shift_window=True,
-
-                relax_parallel_binding=True,
-
-                relax_room_pool=True,
-
-            )
-
-            if not success:
-
-                success = _multi_attempt_backtracking(
-
-                    repack_pending,
-
-                    attempts=1,
-
-                    limit=min(limit + 8, 24),
-
-                    option_cap=8,
-
-                    relax_gapless=True,
-
-                    relax_parallel_gate=True,
-
-                    relax_division_daily=True,
-
-                    relax_shift_window=True,
-
-                    relax_parallel_binding=True,
-
-                    relax_room_pool=True,
-
-                )
-
-            if success:
-
-                return max(len(scheduled_task_assignments) - before_count, 0)
-
-
-
-            # If full solve failed, keep any partial gains from a greedy recovery sweep.
-
-            pending_sorted = sorted(
-
-                repack_pending,
-
-                key=lambda item: (
-
-                    0 if item.year_level == "SY" else 1,
-
-                    len(_candidate_options(item, max_options=24, seed=seeded_rank("partial", task_key(item)), relax_division_daily=True, relax_shift_window=True, relax_parallel_binding=True, relax_room_pool=True)),
-
-                ),
-
-            )
-
-            for pending_task in pending_sorted:
-
-                if task_key(pending_task) in scheduled_task_assignments:
-
-                    continue
-
-                options = _candidate_options(
-
-                    pending_task,
-
-                    max_options=24,
-
-                    seed=seeded_rank("partial", task_key(pending_task)),
-
-                    relax_division_daily=True,
-
-                    relax_shift_window=True,
-
-                    relax_parallel_binding=True,
-
-                    relax_room_pool=True,
-
-                )
-
-                if options:
-
-                    day_id, slot_ids, room_id = options[0]
-
-                    _apply_assignment(pending_task, day_id, slot_ids, room_id)
-
-
-
-            after_count = len(scheduled_task_assignments)
-
-            if after_count > before_count:
-
-                return after_count - before_count
-
-
-
-            # Rollback failed repack attempt.
-
-            for task in repack_pending:
-
-                existing = scheduled_task_assignments.get(task_key(task))
-
-                if existing:
-
-                    _remove_assignment(existing)
-
-            for snapshot in removed_snapshots:
-
-                _apply_assignment(snapshot["task"], snapshot["day_id"], list(snapshot["slot_ids"]), snapshot["room_id"])
-
-            return 0
-
-
-
-        repaired_from_deadlocks = _repair_parallel_deadlocks()
-
-        unresolved_pending = [task for task in unresolved_task_pool if task_key(task) not in scheduled_task_assignments]
-
-        if unresolved_pending:
-
-            _multi_attempt_backtracking(unresolved_pending, attempts=0, limit=0, option_cap=0, relax_parallel_binding=True, relax_room_pool=True)
-
-        unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
-
-        if unresolved_pending:
-
-            lab_first_pending = sorted(
-
-                unresolved_pending,
-
-                key=lambda item: (
-
-                    0 if item.session_type == "LAB" else 1,
-
-                    0 if item.year_level == "TY" else 1,
-
-                ),
-
-            )
-
-            for pending_task in lab_first_pending:
-
-                if task_key(pending_task) in scheduled_task_assignments:
-
-                    continue
-
-                options = _candidate_options(
-
-                    pending_task,
-
-                    max_options=24,
-
-                    seed=seeded_rank("final-greedy", task_key(pending_task)),
-
-                    relax_gapless=True,
-
-                    relax_parallel_gate=True,
-
-                    relax_division_daily=True,
-
-                    relax_shift_window=True,
-
-                    relax_parallel_binding=True,
-
-                    relax_room_pool=True,
-
-                    relax_faculty_daily=True,
-
-                    relax_daily_slot_cap=True,
-
-                )
-
-                if options:
-
-                    day_id, slot_ids, room_id = options[0]
-
-                    _apply_assignment(pending_task, day_id, slot_ids, room_id)
-
-
-
-        unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
-
-        if 0 < len(unresolved_pending) <= 3:
-
-            _multi_attempt_backtracking(
-
-                unresolved_pending,
-
-                attempts=4,
-
-                limit=12,
-
-                option_cap=12,
-
-                relax_gapless=True,
-
-                relax_parallel_gate=True,
-
-                relax_division_daily=True,
-
-                relax_shift_window=True,
-
-                relax_parallel_binding=True,
-
-                relax_room_pool=True,
-
-                relax_faculty_daily=True,
-
-                relax_daily_slot_cap=True,
-
-            )
-
-
-
-        unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
-
-        if unresolved_pending:
-
-            fallback_room_pool = list({str(room["room_id"]): room for room in (lab_rooms + theory_rooms)}.values())
-
-            for pending_task in unresolved_pending:
-
-                if task_key(pending_task) in scheduled_task_assignments:
-
-                    continue
-
-                task_duration = max(pending_task.duration_slots, 1)
-
-                placed = False
-
-                for day in day_rows:
-
-                    day_id = int(day["day_id"])
-
-                    for start_index in range(len(slot_rows_ordered) - task_duration + 1):
-
-                        candidate_slots = slot_rows_ordered[start_index : start_index + task_duration]
-
-                        if len(candidate_slots) != task_duration:
-                            continue
-                        slot_ids = [str(item["slot_id"]) for item in candidate_slots]
-                        shift_name, _ = division_shift_assignments.get(pending_task.division_id, ("SHIFT_08_14", (8 * 60, 14 * 60)))
-                        if uses_lunch_slot(pending_task, shift_name, slot_ids):
-                            continue
-                        if any((pending_task.faculty_id, day_id, slot_id) in used_faculty_slot for slot_id in slot_ids):
-                            continue
-                        if pending_task.batch_id:
-
-                            if any((pending_task.division_id, str(pending_task.batch_id), day_id, slot_id) in used_division_batch_slot for slot_id in slot_ids):
-
-                                continue
-
-                        else:
-
-                            if any((pending_task.division_id, day_id, slot_id) in used_division_full_slot for slot_id in slot_ids):
-
-                                continue
-
-                            if any((pending_task.division_id, day_id, slot_id) in used_division_any_batch_slot for slot_id in slot_ids):
-
-                                continue
-
-                        room_id = None
-
-                        for room in fallback_room_pool:
-
-                            candidate_room_id = str(room["room_id"])
-
-                            if all((candidate_room_id, day_id, slot_id) not in used_room_slot for slot_id in slot_ids):
-
-                                room_id = candidate_room_id
-
-                                break
-
-                        if not room_id:
-
-                            continue
-
-                        _apply_assignment(pending_task, day_id, slot_ids, room_id)
-
-                        placed = True
-
-                        break
-
-                    if placed:
-
-                        break
-
-
-
-        repack_moves = 0
-
-        if any(task_key(task) not in scheduled_task_assignments for task in tasks):
-
-            # Escalate search by temporarily moving flexible sessions.
-
-            repack_moves += _repack_with_movable(max_movable=12, include_theory=False, include_labs=False)
-
-
-
-        unresolved_tasks = max(len(tasks) - len(scheduled_task_assignments), 0)
-
-        unresolved_pending = [task for task in tasks if task_key(task) not in scheduled_task_assignments]
-
-        unresolved_task_samples = [
-
-            {
-
-                "division_id": task.division_id,
-
-                "faculty_id": task.faculty_id,
-
-                "subject_id": task.subject_id,
-
-                "batch_id": task.batch_id,
-
-                "session_type": task.session_type,
-
-                "reason": "no_feasible_slot_after_backtracking",
-
-            }
-
-            for task in unresolved_pending[:20]
-
-        ]
+        # Restore the best candidate state
+        clear_all_state()
+        if best_assignment_snapshot:
+            for v in best_assignment_snapshot.values():
+                _apply_assignment(v["task"], v["day_id"], v["slot_ids"], v["room_id"])
+                
+        # Restore metrics and quality optimization output
+        candidate_rejections = best_candidate_rejections
+        repaired_from_deadlocks = best_repaired_from_deadlocks
+        repack_moves = best_repack_moves
+        quality_optimization = best_quality_opt
+        unresolved_task_samples = best_unresolved_task_samples
+        validation_errors = best_validation_errors
+        unresolved_tasks = best_unresolved
 
         allocated_entries = []
 
@@ -4605,6 +5046,13 @@ class TimetableOrchestrationEngine:
 
                 "unresolved_task_samples": unresolved_task_samples,
 
+                "quality_optimization": quality_optimization,
+
+                "validation": {
+                    "is_valid": len(validation_errors) == 0,
+                    "errors": validation_errors
+                },
+
             },
 
         }
@@ -4618,6 +5066,5 @@ class TimetableOrchestrationEngine:
             "result": final_result,
 
         }
-
 
 
