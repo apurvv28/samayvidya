@@ -243,31 +243,42 @@ async def list_timetable_versions(
         elif target_dept_id:
             query = query.eq("department_id", target_dept_id)
         
-        # Students and Faculty should only see frozen/approved timetables
-        if current_user.role in ["STUDENT", "FACULTY"]:
+        # Students should only see HOD approved timetables
+        # Faculty can see both COORDINATOR_VERIFIED and HOD_APPROVED timetables
+        if current_user.role == "STUDENT":
             query = query.eq("is_frozen", True).eq("approval_status", "HOD_APPROVED")
             print(f"[TIMETABLE_VERSIONS] Filtering for frozen+approved timetables only (role: {current_user.role})")
+        elif current_user.role == "FACULTY":
+            query = query.eq("is_frozen", True).in_("approval_status", ["COORDINATOR_VERIFIED", "HOD_APPROVED"])
+            print(f"[TIMETABLE_VERSIONS] Filtering for frozen+verified/approved timetables (role: {current_user.role})")
             
         response = query.execute()
+        print(f"[TIMETABLE_VERSIONS] Raw response data count: {len(response.data or [])}")
+        if response.data:
+            print(f"[TIMETABLE_VERSIONS] First row sample: {response.data[0]}")
         rows = [_hydrate_version_row(row) for row in (response.data or [])]
         
         # Sort to show the correct latest version:
         # Priority 1: Frozen/Approved timetables (HOD_APPROVED + is_frozen) - these are FINAL
-        # Priority 2: Active timetables that are not frozen - working drafts
-        # Priority 3: Approved but inactive timetables - archived approved versions
-        # Priority 4: Other timetables - drafts, rejected, etc.
+        # Priority 2: Frozen/Verified timetables (COORDINATOR_VERIFIED + is_frozen) - ready for HOD review
+        # Priority 3: Active timetables that are not frozen - working drafts
+        # Priority 4: Approved but inactive timetables - archived approved versions
+        # Priority 5: Other timetables - drafts, rejected, etc.
         def sort_key(row):
             is_active = row.get("is_active", False)
             is_frozen = row.get("is_frozen", False)
-            is_approved = row.get("approval_status") == "HOD_APPROVED"
+            approval_status = row.get("approval_status", "")
             created_at = row.get("created_at", "")
             
             # Frozen + Approved timetables are FINAL and should always be shown first
-            if is_frozen and is_approved:
+            if is_frozen and approval_status == "HOD_APPROVED":
+                priority = 5
+            # Frozen + Verified timetables are ready for HOD review
+            elif is_frozen and approval_status == "COORDINATOR_VERIFIED":
                 priority = 4
             elif is_active:
                 priority = 3
-            elif is_approved:
+            elif approval_status == "HOD_APPROVED":
                 priority = 2
             else:
                 priority = 1
@@ -283,10 +294,15 @@ async def list_timetable_versions(
         
         # Return helpful message if no data
         if not rows:
-            if current_user.role in ["STUDENT", "FACULTY"]:
+            if current_user.role == "STUDENT":
                 return {
                     "data": [],
                     "message": "No approved timetable available yet. Please wait for the HOD to approve the timetable."
+                }
+            elif current_user.role == "FACULTY":
+                return {
+                    "data": [],
+                    "message": "No verified timetable available yet. Please wait for the coordinator to verify the timetable."
                 }
             return {
                 "data": [],
@@ -468,6 +484,92 @@ class ApprovalAction(BaseModel):
     rejection_reason: str | None = None
 
 
+@router.post("/debug/freeze-verified", response_model=SuccessResponse)
+async def debug_freeze_verified_timetables(
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
+) -> dict:
+    """Debug endpoint to freeze all COORDINATOR_VERIFIED and HOD_APPROVED timetables (ADMIN/COORDINATOR only)."""
+    if current_user.role not in ["ADMIN", "COORDINATOR"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins and coordinators can access debug endpoint"
+        )
+    
+    try:
+        supabase = get_service_supabase()
+        
+        # First, get all verified/approved timetables that are not frozen
+        check_response = (
+            supabase.table("timetable_versions")
+            .select("version_id, version_name, approval_status, is_frozen")
+            .in_("approval_status", ["COORDINATOR_VERIFIED", "HOD_APPROVED"])
+            .eq("is_frozen", False)
+            .execute()
+        )
+        
+        unfrozen_count = len(check_response.data or [])
+        
+        if unfrozen_count == 0:
+            return {
+                "data": {"updated_count": 0},
+                "message": "No unfrozen verified/approved timetables found. All are already frozen."
+            }
+        
+        # Freeze them
+        update_response = (
+            supabase.table("timetable_versions")
+            .update({"is_frozen": True})
+            .in_("approval_status", ["COORDINATOR_VERIFIED", "HOD_APPROVED"])
+            .eq("is_frozen", False)
+            .execute()
+        )
+        
+        return {
+            "data": {
+                "updated_count": len(update_response.data or []),
+                "updated_versions": update_response.data or []
+            },
+            "message": f"Successfully froze {len(update_response.data or [])} verified/approved timetables"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to freeze timetables: {str(e)}"
+        )
+
+
+@router.get("/debug/all-versions", response_model=SuccessResponse)
+async def debug_all_versions(
+    current_user: CurrentUser = Depends(get_current_user_with_profile),
+) -> dict:
+    """Debug endpoint to see all timetable versions without filters (ADMIN/COORDINATOR only)."""
+    if current_user.role not in ["ADMIN", "COORDINATOR", "HOD"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins, coordinators, and HODs can access debug endpoint"
+        )
+    
+    try:
+        supabase = get_service_supabase()
+        response = (
+            supabase.table("timetable_versions")
+            .select("version_id, version_name, is_frozen, is_active, approval_status, created_at, department_id")
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+        
+        return {
+            "data": response.data or [],
+            "message": f"Retrieved {len(response.data or [])} timetable versions (unfiltered)"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch debug versions: {str(e)}"
+        )
+
+
 @router.post("/{version_id}/verify", response_model=SuccessResponse)
 async def verify_timetable_version(
     version_id: str,
@@ -484,12 +586,13 @@ async def verify_timetable_version(
                 detail="Only coordinators can verify timetables"
             )
         
-        # Update timetable version
+        # Update timetable version - freeze it and mark as verified
         from datetime import datetime
         response = (
             supabase.table("timetable_versions")
             .update({
                 "approval_status": "COORDINATOR_VERIFIED",
+                "is_frozen": True,  # Freeze the timetable when coordinator verifies
                 "verified_by": current_user.uid,
                 "verified_at": datetime.utcnow().isoformat()
             })

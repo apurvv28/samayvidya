@@ -101,11 +101,15 @@ export default function FacultyDashboard() {
         }
 
         const versionsData = await versionsRes.json();
+        console.log('[FACULTY DASHBOARD] Timetable versions response:', versionsData);
         const versions = versionsData.data || [];
+        console.log('[FACULTY DASHBOARD] Parsed versions:', versions);
         if (versions.length > 0) {
+          console.log('[FACULTY DASHBOARD] Setting latest version:', versions[0].version_id);
           setLatestVersionId(versions[0].version_id);
         } else {
           // No frozen timetable available
+          console.log('[FACULTY DASHBOARD] No timetable versions available. Message:', versionsData.message);
           setLatestVersionId(null);
         }
       } catch (err) {
