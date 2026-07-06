@@ -1356,6 +1356,8 @@ This project uses several open-source libraries and frameworks. Please refer to 
 <div align="center">
 
 **Made with ❤️ by the SamayVidya Team**
+  DEPARTMENT OF CSE-AI
+  VIT, PUNE
 
 ⭐ **Star this repository if you found it helpful!** ⭐
 
