@@ -756,7 +756,7 @@ export default function TimetableViewer({
         throw new Error(result?.detail || 'Failed to verify timetable.');
       }
 
-      setVersionMeta((prev) => ({ ...(prev || {}), approval_status: 'COORDINATOR_VERIFIED' }));
+      setVersionMeta((prev) => ({ ...(prev || {}), approval_status: 'COORDINATOR_VERIFIED', is_frozen: true }));
       showToast('Timetable verified and forwarded to HOD.', 'success');
       await fetchTimetableData(versionId);
     } catch (error) {

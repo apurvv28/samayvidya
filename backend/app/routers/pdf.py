@@ -194,7 +194,7 @@ def generate_timetable_pdf(entries, days, slots, version_meta, divisions, facult
     batch_map = {str(b.get("batch_id")): b.get("batch_code", b.get("batch_name", "")) for b in batches if b.get("batch_id")}
     batch_lunch_labels = _build_batch_lunch_labels(batches)
 
-    sorted_days = sorted(days, key=lambda d: d.get("day_id", 0))
+    sorted_days = [d for d in sorted(days, key=lambda d: d.get("day_id", 0)) if d.get("is_working_day", True)]
     sorted_slots = sorted(slots, key=lambda s: s.get("slot_order", 0))
 
     # Group entries based on section type
