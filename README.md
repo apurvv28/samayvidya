@@ -47,7 +47,7 @@
 
 **SamayVidya** (Sanskrit: समयविद्या - "Science of Time") is a production-grade, AI-powered academic timetable scheduling system designed for university departments. It automates the complex task of generating conflict-free timetables while respecting hard constraints such as faculty availability, room capacity, lab parallelization, and workload limits.
 
-### The Challenge
+### The Challenges 
 
 Traditional timetable generation is a combinatorial optimization problem involving:
 - **Multiple stakeholders**: Faculty, students, coordinators, HODs
