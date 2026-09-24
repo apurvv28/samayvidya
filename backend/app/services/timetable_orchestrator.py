@@ -1803,8 +1803,9 @@ class TimetableOrchestrationEngine:
                 "total_idle_slots": total_idle_slots
             }
 
-        def validate_timetable(assignments: dict) -> tuple[bool, list[str]]:
+        def validate_timetable(assignments: dict) -> tuple[bool, list[str], list[str]]:
             errors = []
+            warnings = []
             room_slot_counts = {}
             fac_slot_counts = {}
             batch_slot_counts = {}
@@ -1851,7 +1852,7 @@ class TimetableOrchestrationEngine:
                                 if (o - 1) in other_orders or (o + 1) in other_orders:
                                     same_subject_consecutive += 1
             if same_subject_consecutive > 0:
-                errors.append(f"Consecutive same-subject theory sessions: {same_subject_consecutive // 2} overlaps")
+                warnings.append(f"Consecutive same-subject theory sessions: {same_subject_consecutive // 2} overlaps")
                 
             subject_daily_counts = {}
             for key, val in assignments.items():
@@ -1863,7 +1864,7 @@ class TimetableOrchestrationEngine:
                 subject_daily_counts[skey] = subject_daily_counts.get(skey, 0) + 1
             for skey, count in subject_daily_counts.items():
                 if count > 2:
-                    errors.append(f"Subject spread imbalance: Division {skey[0]} has {count} theory sessions of subject {skey[1]} on Day {skey[2]}")
+                    warnings.append(f"Subject spread imbalance: Division {skey[0]} has {count} theory sessions of subject {skey[1]} on Day {skey[2]}")
                     
             tutorial_extreme_counts = {}
             for key, val in assignments.items():
@@ -1885,7 +1886,7 @@ class TimetableOrchestrationEngine:
                 if len(counts) >= 2:
                     imbalance = max(counts) - min(counts)
                     if imbalance > 3:
-                        errors.append(f"Tutorial fairness violation in Division {div_id}: extreme slot imbalance is {imbalance} (> 3)")
+                        warnings.append(f"Tutorial fairness violation in Division {div_id}: extreme slot imbalance is {imbalance} (> 3)")
                         
             batch_day_slots = {}
             for key, val in assignments.items():
@@ -1909,9 +1910,9 @@ class TimetableOrchestrationEngine:
                     if o not in orders and o not in break_orders:
                         idle_count += 1
                 if idle_count > 2:
-                    errors.append(f"Acceptable compactness violation: Division {bkey[0]} Batch {bkey[1]} on Day {bkey[2]} has {idle_count} idle gap slots (> 2)")
+                    warnings.append(f"Acceptable compactness violation: Division {bkey[0]} Batch {bkey[1]} on Day {bkey[2]} has {idle_count} idle gap slots (> 2)")
                     
-            return len(errors) == 0, errors
+            return len(errors) == 0, errors, warnings
 
         def year_rank(value: str) -> int:
 
@@ -2283,6 +2284,7 @@ class TimetableOrchestrationEngine:
         best_repack_moves = 0
         best_unresolved_task_samples = []
         best_validation_errors = []
+        best_validation_warnings = []
 
         # We will run 3 candidate attempts
         for attempt in range(3):
@@ -3211,20 +3213,51 @@ class TimetableOrchestrationEngine:
                 room_id = str(assignment["room_id"])
     
                 key = task_key(task)
+                remaining_assignments = [
+                    existing
+                    for existing_key, existing in scheduled_task_assignments.items()
+                    if existing_key != key
+                ]
     
     
     
                 for slot_id in slot_ids:
     
-                    used_room_slot.discard((room_id, day_id, slot_id))
+                    if not any(
+                        str(existing["room_id"]) == room_id
+                        and int(existing["day_id"]) == day_id
+                        and slot_id in [str(value) for value in existing["slot_ids"]]
+                        for existing in remaining_assignments
+                    ):
+                        used_room_slot.discard((room_id, day_id, slot_id))
     
-                    used_faculty_slot.discard((task.faculty_id, day_id, slot_id))
+                    if not any(
+                        existing["task"].faculty_id == task.faculty_id
+                        and int(existing["day_id"]) == day_id
+                        and slot_id in [str(value) for value in existing["slot_ids"]]
+                        for existing in remaining_assignments
+                    ):
+                        used_faculty_slot.discard((task.faculty_id, day_id, slot_id))
     
                     if task.batch_id:
     
-                        used_division_batch_slot.discard((task.division_id, str(task.batch_id), day_id, slot_id))
+                        if not any(
+                            existing["task"].division_id == task.division_id
+                            and str(existing["task"].batch_id) == str(task.batch_id)
+                            and int(existing["day_id"]) == day_id
+                            and slot_id in [str(value) for value in existing["slot_ids"]]
+                            for existing in remaining_assignments
+                        ):
+                            used_division_batch_slot.discard((task.division_id, str(task.batch_id), day_id, slot_id))
     
-                        used_division_any_batch_slot.discard((task.division_id, day_id, slot_id))
+                        if not any(
+                            existing["task"].division_id == task.division_id
+                            and existing["task"].batch_id
+                            and int(existing["day_id"]) == day_id
+                            and slot_id in [str(value) for value in existing["slot_ids"]]
+                            for existing in remaining_assignments
+                        ):
+                            used_division_any_batch_slot.discard((task.division_id, day_id, slot_id))
     
                         if task.session_type == "LAB":
     
@@ -3258,7 +3291,14 @@ class TimetableOrchestrationEngine:
     
                     else:
     
-                        used_division_full_slot.discard((task.division_id, day_id, slot_id))
+                        if not any(
+                            existing["task"].division_id == task.division_id
+                            and not existing["task"].batch_id
+                            and int(existing["day_id"]) == day_id
+                            and slot_id in [str(value) for value in existing["slot_ids"]]
+                            for existing in remaining_assignments
+                        ):
+                            used_division_full_slot.discard((task.division_id, day_id, slot_id))
     
     
     
@@ -3837,6 +3877,12 @@ class TimetableOrchestrationEngine:
                         selected_day, selected_slots, selected_room = options[0]
     
                         _apply_assignment(entry["task"], selected_day, selected_slots, selected_room)
+                        scheduled_task_assignments[task_key(entry["task"])] = {
+                            "task": entry["task"],
+                            "day_id": selected_day,
+                            "slot_ids": list(selected_slots),
+                            "room_id": selected_room,
+                        }
     
     
     
@@ -3857,6 +3903,12 @@ class TimetableOrchestrationEngine:
                     for entry in original_payload:
     
                         _apply_assignment(entry["task"], int(entry["day_id"]), list(entry["slot_ids"]), str(entry["room_id"]))
+                        scheduled_task_assignments[task_key(entry["task"])] = {
+                            "task": entry["task"],
+                            "day_id": int(entry["day_id"]),
+                            "slot_ids": list(entry["slot_ids"]),
+                            "room_id": str(entry["room_id"]),
+                        }
     
     
     
@@ -4467,6 +4519,8 @@ class TimetableOrchestrationEngine:
                             if any((pending_task.faculty_id, day_id, slot_id) in used_faculty_slot for slot_id in slot_ids):
                                 continue
                             if pending_task.batch_id:
+                                if any((pending_task.division_id, day_id, slot_id) in used_division_full_slot for slot_id in slot_ids):
+                                    continue
     
                                 if any((pending_task.division_id, str(pending_task.batch_id), day_id, slot_id) in used_division_batch_slot for slot_id in slot_ids):
     
@@ -4550,7 +4604,7 @@ class TimetableOrchestrationEngine:
             attempt_unresolved = len(tasks) - len(scheduled_task_assignments)
             attempt_score_dict = compute_quality_score(scheduled_task_assignments)
             attempt_score = attempt_score_dict["overall_quality_score"]
-            is_valid, validation_errors = validate_timetable(scheduled_task_assignments)
+            is_valid, validation_errors, validation_warnings = validate_timetable(scheduled_task_assignments)
             
             curr_validity = 0 if is_valid else 1
             
@@ -4577,6 +4631,7 @@ class TimetableOrchestrationEngine:
                 best_repack_moves = repack_moves
                 best_unresolved_task_samples = copy.deepcopy(unresolved_task_samples)
                 best_validation_errors = list(validation_errors)
+                best_validation_warnings = list(validation_warnings)
                 
                 best_assignment_snapshot = {}
                 for k, v in scheduled_task_assignments.items():
@@ -4600,6 +4655,7 @@ class TimetableOrchestrationEngine:
         quality_optimization = best_quality_opt
         unresolved_task_samples = best_unresolved_task_samples
         validation_errors = best_validation_errors
+        validation_warnings = best_validation_warnings
         unresolved_tasks = best_unresolved
 
         allocated_entries = []
@@ -5050,7 +5106,8 @@ class TimetableOrchestrationEngine:
 
                 "validation": {
                     "is_valid": len(validation_errors) == 0,
-                    "errors": validation_errors
+                    "errors": validation_errors,
+                    "warnings": validation_warnings,
                 },
 
             },
